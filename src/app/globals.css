@@ -1,0 +1,83 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+:root {
+  --paper: #f3eee4;
+  --paper-2: #ebe4d6;
+  --paper-3: #e2d8c6;
+  --ink: #1b1712;
+  --ink-soft: #5c564c;
+  --line: #d5cbb8;
+  --accent: #c45c26;
+  --seed: #2c6b5a;
+  --card: #faf6ee;
+  --nuri: #c9892c;
+  --sori: #b4412a;
+  --dal: #3d4d7a;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-3: var(--paper-3);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-seed: var(--seed);
+  --color-card: var(--card);
+  --color-nuri: var(--nuri);
+  --color-sori: var(--sori);
+  --color-dal: var(--dal);
+  --font-sans: var(--font-noto);
+  --font-display: var(--font-fraunces);
+}
+
+html {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans), "Noto Sans KR", sans-serif;
+}
+
+.display {
+  font-family: var(--font-display), "Times New Roman", serif;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.pane {
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.hairline {
+  border-color: var(--line);
+}
+
+.map-wrap .leaflet-container {
+  background: #e7e0d2;
+  font-family: inherit;
+}
+
+.map-wrap .leaflet-control-attribution {
+  font-size: 10px;
+  background: rgba(250, 246, 238, 0.85);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--paper-3);
+  border-radius: 99px;
+}
