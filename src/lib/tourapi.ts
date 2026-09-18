@@ -4,7 +4,14 @@ import type { ContentType, Localized, Place, TourStatus } from "./types";
 const BASE = {
   kor: "https://apis.data.go.kr/B551011/KorService2",
   eng: "https://apis.data.go.kr/B551011/EngService2",
+  jpn: "https://apis.data.go.kr/B551011/JpnService2",
 };
+
+const SERVICE = {
+  kor: "KorService2",
+  eng: "EngService2",
+  jpn: "JpnService2",
+} as const;
 
 const APP = "NativeCity";
 
@@ -93,12 +100,12 @@ export function normalizeTourItem(item: TourItem, sourceLang: "ko" | "en"): Plac
 }
 
 async function tourGet(
-  family: "kor" | "eng",
+  family: keyof typeof BASE,
   path: string,
   params: Record<string, string>,
 ): Promise<{ ok: true; items: TourItem[]; raw: unknown } | { ok: false; error: string }> {
   const key = serviceKey();
-  const service = family === "eng" ? "EngService2" : "KorService2";
+  const service = SERVICE[family];
   if (!key) {
     recordTourCall({
       at: new Date().toISOString(),
@@ -170,10 +177,10 @@ export async function locationBasedList(opts: {
   lng: number;
   radius?: number;
   contentTypeId?: string;
-  lang?: "ko" | "en";
+  lang?: "ko" | "en" | "ja";
 }): Promise<{ places: Place[]; status: TourStatus }> {
   const lang = opts.lang ?? "ko";
-  const family = lang === "en" ? "eng" : "kor";
+  const family = lang === "en" ? "eng" : lang === "ja" ? "jpn" : "kor";
   const endpoint = "locationBasedList2";
   const result = await tourGet(family, endpoint, {
     mapY: String(opts.lat),
@@ -188,19 +195,19 @@ export async function locationBasedList(opts: {
   if (!result.ok) {
     return {
       places: [],
-      status: { live: false, endpoint: `${family}/${endpoint}`, error: result.error, lang },
+      status: { live: false, endpoint: `${SERVICE[family]}/${endpoint}`, error: result.error, lang },
     };
   }
 
   const places = result.items
-    .map((item) => normalizeTourItem(item, lang))
+    .map((item) => normalizeTourItem(item, lang === "en" ? "en" : "ko"))
     .filter((p): p is Place => Boolean(p));
 
   return {
     places,
     status: {
       live: true,
-      endpoint: `${family === "eng" ? "EngService2" : "KorService2"}/${endpoint}`,
+      endpoint: `${SERVICE[family]}/${endpoint}`,
       count: places.length,
       lang,
     },
@@ -216,7 +223,7 @@ export async function searchKeyword(keyword: string, lang: "ko" | "en" = "ko") {
     arrange: "A",
   });
   if (!result.ok) {
-    return { places: [] as Place[], status: { live: false, error: result.error, endpoint: `${family}/searchKeyword2`, lang } satisfies TourStatus };
+    return { places: [] as Place[], status: { live: false, error: result.error, endpoint: `${SERVICE[family]}/searchKeyword2`, lang } satisfies TourStatus };
   }
   const places = result.items
     .map((item) => normalizeTourItem(item, lang))
@@ -225,7 +232,7 @@ export async function searchKeyword(keyword: string, lang: "ko" | "en" = "ko") {
     places,
     status: {
       live: true,
-      endpoint: `${family === "eng" ? "EngService2" : "KorService2"}/searchKeyword2`,
+      endpoint: `${SERVICE[family]}/searchKeyword2`,
       count: places.length,
       lang,
     } satisfies TourStatus,
@@ -253,6 +260,12 @@ export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: 
     radius: 4000,
     lang: "en",
   });
+  const jpn = await locationBasedList({
+    lat: 37.5639,
+    lng: 127.0296,
+    radius: 4000,
+    lang: "ja",
+  });
 
   const byId = new Map<string, Place>();
   for (const p of [...food.places, ...spots.places]) byId.set(p.contentId ?? p.id, p);
@@ -271,16 +284,16 @@ export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: 
     }
   }
 
-  const live = food.status.live || spots.status.live || eng.status.live;
-  const error = food.status.error || spots.status.error || eng.status.error;
+  const live = food.status.live || spots.status.live || eng.status.live || jpn.status.live;
+  const error = food.status.error || spots.status.error || eng.status.error || jpn.status.error;
   return {
     places: [...byId.values()],
     status: {
       live,
-      endpoint: "KorService2+EngService2 / locationBasedList2",
+      endpoint: "KorService2+EngService2+JpnService2 / locationBasedList2",
       count: byId.size,
       error: live ? undefined : error,
-      lang: "ko+en",
+      lang: "ko+en+ja",
     },
   };
 }
@@ -289,14 +302,14 @@ export async function detailCommon(contentId: string, lang: "ko" | "en" = "ko") 
   const family = lang === "en" ? "eng" : "kor";
   const result = await tourGet(family, "detailCommon2", { contentId });
   if (!result.ok) {
-    return { place: null as Place | null, status: { live: false, error: result.error, endpoint: `${family}/detailCommon2`, lang } satisfies TourStatus };
+    return { place: null as Place | null, status: { live: false, error: result.error, endpoint: `${SERVICE[family]}/detailCommon2`, lang } satisfies TourStatus };
   }
   const item = result.items[0];
   return {
     place: item ? normalizeTourItem(item, lang) : null,
     status: {
       live: true,
-      endpoint: `${family === "eng" ? "EngService2" : "KorService2"}/detailCommon2`,
+      endpoint: `${SERVICE[family]}/detailCommon2`,
       count: item ? 1 : 0,
       lang,
     } satisfies TourStatus,

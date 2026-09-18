@@ -52,6 +52,7 @@ export function GuestApp() {
   const [threadId] = useState(() => crypto.randomUUID());
   const [tourLog, setTourLog] = useState<{ path: string; ok: boolean; service: string }[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
+  const placesRef = useRef(places);
 
   const character = characterById(characterId);
   const guest = guestById(guestId);
@@ -87,6 +88,36 @@ export function GuestApp() {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    placesRef.current = places;
+  }, [places]);
+
+  useEffect(() => {
+    const place = selectedId ? placeById(selectedId, placesRef.current) : undefined;
+    if (!place?.contentId) return;
+    fetch(`/api/tour?contentId=${encodeURIComponent(place.contentId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.place?.overview) {
+          setPlaces((prev) =>
+            prev.map((p) =>
+              p.id === place.id
+                ? {
+                    ...p,
+                    overview: data.place.overview ?? p.overview,
+                    tel: data.place.tel || p.tel,
+                    sources: Array.from(new Set([...p.sources, "kto"])) as Place["sources"],
+                  }
+                : p,
+            ),
+          );
+        }
+        if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
+        if (data.status) setStatus(data.status);
+      })
+      .catch(() => undefined);
+  }, [selectedId]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });

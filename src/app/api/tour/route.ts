@@ -48,6 +48,7 @@ export async function GET(req: Request) {
       services: [
         { name: "KorService2", ops: ["locationBasedList2", "searchKeyword2", "detailCommon2"] },
         { name: "EngService2", ops: ["locationBasedList2", "searchKeyword2"] },
+        { name: "JpnService2", ops: ["locationBasedList2"] },
       ],
       origin: "https://apis.data.go.kr/B551011",
       app: "NativeCity",

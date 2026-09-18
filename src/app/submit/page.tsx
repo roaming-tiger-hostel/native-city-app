@@ -75,6 +75,9 @@ export default function SubmitPage() {
             <code>EngService2/locationBasedList2</code> — 영문 표기 병합. 외국인 손님 1차 언어
           </li>
           <li>
+            <code>JpnService2/locationBasedList2</code> — 공사 다국어(일어) 관광정보. 유키 세그먼트용 사실 레이어
+          </li>
+          <li>
             <code>searchKeyword2</code> — 스튜디오 키워드 검색, 채팅 의도(맛집/공원/야경) 보강
           </li>
           <li>
