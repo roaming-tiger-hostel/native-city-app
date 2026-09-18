@@ -5,18 +5,18 @@ export const TEST_ACCOUNTS = [
   {
     id: "guest",
     role: "guest" as Role,
-    name: "Maya Putri",
-    guestId: "maya",
+    name: "Visitor",
+    guestId: "visitor",
     password: "guest2026",
     label: { ko: "손님 테스트", en: "Guest test" },
   },
   {
     id: "trainer",
     role: "trainer" as Role,
-    name: "Host Eungjin",
-    guestId: "tom",
+    name: "Maya Putri",
+    guestId: "visitor",
     password: "trainer2026",
-    label: { ko: "트레이너 테스트", en: "Trainer test" },
+    label: { ko: "커뮤니티 트레이너", en: "Community trainer" },
   },
 ];
 

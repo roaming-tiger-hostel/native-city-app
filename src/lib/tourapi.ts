@@ -1,5 +1,16 @@
 import { recordTourCall } from "./runtime";
+import { getTourApiKey } from "./secrets";
 import type { ContentType, Localized, Place, TourStatus } from "./types";
+
+let cacheGeneration = 0;
+
+export function invalidateTourCache() {
+  cacheGeneration += 1;
+}
+
+export function tourCacheGeneration() {
+  return cacheGeneration;
+}
 
 const BASE = {
   kor: "https://apis.data.go.kr/B551011/KorService2",
@@ -30,7 +41,7 @@ export type TourItem = {
 };
 
 function serviceKey() {
-  return process.env.TOUR_API_KEY?.trim() || "";
+  return getTourApiKey();
 }
 
 export function tourConfigured() {
@@ -99,6 +110,15 @@ export function normalizeTourItem(item: TourItem, sourceLang: "ko" | "en"): Plac
   };
 }
 
+const unavailable: Partial<Record<keyof typeof BASE, string>> = {};
+
+function describeHttpError(family: keyof typeof BASE, status: number) {
+  if (status === 403) {
+    return `HTTP 403 · ${SERVICE[family]} 미신청 (KorService2는 0000)`;
+  }
+  return `HTTP ${status}`;
+}
+
 async function tourGet(
   family: keyof typeof BASE,
   path: string,
@@ -117,6 +137,9 @@ async function tourGet(
     });
     return { ok: false, error: "TOUR_API_KEY missing" };
   }
+  if (unavailable[family]) {
+    return { ok: false, error: unavailable[family] };
+  }
 
   const url = new URL(`${BASE[family]}/${path}`);
   url.searchParams.set("serviceKey", key);
@@ -127,15 +150,17 @@ async function tourGet(
 
   const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
+    const error = describeHttpError(family, res.status);
+    if (res.status === 403) unavailable[family] = error;
     recordTourCall({
       at: new Date().toISOString(),
       service,
       path,
       params,
       ok: false,
-      error: `HTTP ${res.status}`,
+      error,
     });
-    return { ok: false, error: `HTTP ${res.status}` };
+    return { ok: false, error };
   }
 
   const json = (await res.json()) as {
@@ -215,7 +240,7 @@ export async function locationBasedList(opts: {
 }
 
 export async function searchKeyword(keyword: string, lang: "ko" | "en" = "ko") {
-  const family = lang === "en" ? "eng" : "kor";
+  const family = lang === "en" && !unavailable.eng ? "eng" : "kor";
   const result = await tourGet(family, "searchKeyword2", {
     keyword,
     numOfRows: "20",
@@ -284,22 +309,24 @@ export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: 
     }
   }
 
-  const live = food.status.live || spots.status.live || eng.status.live || jpn.status.live;
-  const error = food.status.error || spots.status.error || eng.status.error || jpn.status.error;
+  const live = food.status.live || spots.status.live;
+  const langs = ["ko", eng.status.live ? "en" : null, jpn.status.live ? "ja" : null].filter(Boolean).join("+");
   return {
     places: [...byId.values()],
     status: {
       live,
-      endpoint: "KorService2+EngService2+JpnService2 / locationBasedList2",
+      endpoint: eng.status.live || jpn.status.live
+        ? "KorService2+EngService2+JpnService2 / locationBasedList2"
+        : "KorService2 / locationBasedList2",
       count: byId.size,
-      error: live ? undefined : error,
-      lang: "ko+en+ja",
+      error: live ? undefined : food.status.error || spots.status.error,
+      lang: langs || "ko",
     },
   };
 }
 
 export async function detailCommon(contentId: string, lang: "ko" | "en" = "ko") {
-  const family = lang === "en" ? "eng" : "kor";
+  const family = lang === "en" && !unavailable.eng ? "eng" : "kor";
   const result = await tourGet(family, "detailCommon2", { contentId });
   if (!result.ok) {
     return { place: null as Place | null, status: { live: false, error: result.error, endpoint: `${SERVICE[family]}/detailCommon2`, lang } satisfies TourStatus };

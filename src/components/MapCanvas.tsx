@@ -10,9 +10,10 @@ type Props = {
   selectedId?: string;
   onSelect: (id: string) => void;
   lang?: Lang;
+  active?: boolean;
 };
 
-export function MapCanvas({ places, selectedId, onSelect, lang = "en" }: Props) {
+export function MapCanvas({ places, selectedId, onSelect, lang = "en", active = true }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
@@ -98,15 +99,31 @@ export function MapCanvas({ places, selectedId, onSelect, lang = "en" }: Props) 
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready) return;
-    const id = window.setTimeout(() => map.invalidateSize(), 80);
-    const onResize = () => map.invalidateSize();
+    const el = ref.current;
+    if (!map || !ready || !el) return;
+    const invalidate = () => {
+      map.invalidateSize();
+      if (places.length) {
+        const bounds = [
+          [HOSTEL.lat, HOSTEL.lng] as [number, number],
+          ...places.map((p) => [p.lat, p.lng] as [number, number]),
+        ];
+        map.fitBounds(bounds as [number, number][], { padding: [24, 24], maxZoom: 15 });
+      } else {
+        map.setView([HOSTEL.lat, HOSTEL.lng], 14);
+      }
+    };
+    const id = window.setTimeout(invalidate, 80);
+    const onResize = () => invalidate();
     window.addEventListener("resize", onResize);
+    const ro = new ResizeObserver(() => invalidate());
+    ro.observe(el);
     return () => {
       window.clearTimeout(id);
       window.removeEventListener("resize", onResize);
+      ro.disconnect();
     };
-  }, [ready, places.length]);
+  }, [ready, places, active]);
 
   return <div ref={ref} className="h-full min-h-[140px] w-full" />;
 }

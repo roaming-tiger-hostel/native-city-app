@@ -100,11 +100,13 @@ export function rankPlaces(opts: {
     return opts.character.kinds.includes(p.kind);
   });
 
+  const porkFree = Boolean(opts.guest.porkFree || opts.character.porkFree);
+  const vegetarian = Boolean(opts.guest.vegetarian || opts.character.vegetarian);
   const constrained = inKind.filter((p) => {
-    if (opts.guest.porkFree && p.porkFree === false && (p.kind === "food" || p.kind === "market")) {
+    if (porkFree && p.porkFree === false && (p.kind === "food" || p.kind === "market")) {
       return false;
     }
-    if (opts.guest.vegetarian && p.vegetarianFriendly === false && p.kind === "food") {
+    if (vegetarian && p.vegetarianFriendly === false && p.kind === "food") {
       return false;
     }
     if (opts.character.vetoTouristTrap && (p.axes.touristTrap ?? 0) >= 0.9) return false;
@@ -128,7 +130,7 @@ export function rankPlaces(opts: {
         score += opts.character.weights.distance * (1 - Math.min(p.distMeters / 5000, 1));
       }
       if (opts.guest.lateNight && p.openLate) score += 0.08;
-      if (opts.guest.porkFree && p.porkFree) score += 0.12;
+      if (porkFree && p.porkFree) score += 0.12;
 
       const why: Localized = whyFor(opts.character, p);
       return { ...p, score, why };
@@ -137,10 +139,22 @@ export function rankPlaces(opts: {
 }
 
 function whyFor(character: Character, place: Place): Localized {
+  if (character.porkFree && place.porkFree) {
+    return {
+      ko: "돼지 없는 집. 이 캐릭터가 실제로 판정한 기준.",
+      en: "Pork-free. A place this character has actually judged.",
+    };
+  }
   if (character.id === "nuri" && place.guestSeedCount > 8) {
     return {
       ko: `여기 묵은 손님 ${place.guestSeedCount}명이 실제로 갔다.`,
       en: `${place.guestSeedCount} guests staying here actually went.`,
+    };
+  }
+  if (character.origin === "community") {
+    return {
+      ko: `${character.trainedBy.ko} 기준으로 ${place.note.ko}`,
+      en: `${character.trainedBy.en}: ${place.note.en}`,
     };
   }
   if (character.id === "sori") {
@@ -245,17 +259,38 @@ function composeSpeech(
     return { ko, en };
   }
 
+  if (character.id === "dal") {
+    const ko = [
+      intent === "night" ? "밤이면 한 루트만." : "오늘은 이 공기.",
+      `${top.title.ko} — ${top.note.ko}`,
+      second ? `붙이지 마. ${second.title.ko}는 다른 날.` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const en = [
+      intent === "night" ? "At night, one route." : "This air, today.",
+      `${top.title.en} — ${top.note.en}`,
+      second ? `Don't glue on ${second.title.en}. Another day.` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return { ko, en };
+  }
+
+  const pork = Boolean(character.porkFree || guest.porkFree);
   const ko = [
-    intent === "night" ? "밤이면 한 루트만." : "오늘은 이 공기.",
-    `${top.title.ko} — ${top.note.ko}`,
-    second ? `붙이지 마. ${second.title.ko}는 다른 날.` : null,
+    pork ? "돼지 안 먹는 기준으로 골랐어." : `${character.trainedBy.ko}가 가르친 기준이야.`,
+    `${top.title.ko} — ${top.why.ko}`,
+    second ? `차선은 ${second.title.ko}.` : null,
+    top.distMeters != null ? `호스텔에서 약 ${Math.round(top.distMeters / 80)}분.` : null,
   ]
     .filter(Boolean)
     .join(" ");
   const en = [
-    intent === "night" ? "At night, one route." : "This air, today.",
-    `${top.title.en} — ${top.note.en}`,
-    second ? `Don't glue on ${second.title.en}. Another day.` : null,
+    pork ? "I picked from pork-free places." : `This is ${character.trainedBy.en}'s judgment.`,
+    `${top.title.en} — ${top.why.en}`,
+    second ? `Backup: ${second.title.en}.` : null,
+    top.distMeters != null ? `About ${Math.round(top.distMeters / 80)} min from the hostel.` : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -274,7 +309,7 @@ export function runEngine(opts: {
   character?: Character;
 }): EngineResult {
   const character =
-    opts.character ?? CHARACTERS.find((c) => c.id === opts.characterId) ?? CHARACTERS[0];
+    opts.character ?? CHARACTERS.find((c) => c.id === opts.characterId) ?? CHARACTERS.find((c) => c.id === "maya") ?? CHARACTERS[0];
   const places = opts.places ?? PLACES;
   const intent = classifyIntent(opts.message);
   const ranked = rankPlaces({
@@ -322,10 +357,13 @@ export function runEngine(opts: {
   };
 }
 
-export function greeting(characterId: CharacterId, lang: Lang = "en"): ChatMessage {
-  const c = CHARACTERS.find((x) => x.id === characterId) ?? CHARACTERS[0];
+export function greeting(character: Character | CharacterId, lang: Lang = "en"): ChatMessage {
+  const c =
+    typeof character === "string"
+      ? (CHARACTERS.find((x) => x.id === character) ?? CHARACTERS.find((x) => x.id === "maya") ?? CHARACTERS[0])
+      : character;
   return {
-    id: `greet-${characterId}-${lang}`,
+    id: `greet-${c.id}-${lang}`,
     role: "character",
     text: c.lines.greeting[lang],
     createdAt: new Date().toISOString(),

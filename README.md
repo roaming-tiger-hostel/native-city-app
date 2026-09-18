@@ -26,11 +26,10 @@
 
 ```bash
 pnpm install
-cp .env.example .env.local   # TOUR_API_KEY 는 data.go.kr 일반 인증키
 pnpm dev
 ```
 
-`TOUR_API_KEY`가 없으면 한국관광공사 TourAPI와 같은 스키마의 시드 캐시로 돌아간다. 키가 있으면 `KorService2` + `EngService2`의 `locationBasedList2`를 호스텔 좌표 기준으로 병합한다.
+TourAPI 인증키는 **채팅에 붙여 넣지 않는다.** `/studio` 장소 탭의 비밀번호 칸에 넣으면 gitignored `.env.local`(권한 600)에만 저장된다. 없으면 시드 캐시로 동작한다.
 
 ## 규칙
 

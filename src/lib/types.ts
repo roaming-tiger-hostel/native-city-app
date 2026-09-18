@@ -54,20 +54,25 @@ export type Place = {
   distMeters?: number;
 };
 
-export type CharacterId = "nuri" | "sori" | "dal";
+export type CharacterId = string;
+export type CharacterOrigin = "house" | "community";
 
 export type Character = {
   id: CharacterId;
+  origin: CharacterOrigin;
   name: Localized;
   short: Localized;
   bio: Localized;
   voice: Localized;
   color: string;
   trainedBy: Localized;
+  trainerNote: Localized;
   coverage: Localized;
   kinds: PlaceKind[];
   weights: Record<AxisId, number>;
   vetoTouristTrap: boolean;
+  porkFree?: boolean;
+  vegetarian?: boolean;
   lines: {
     greeting: Localized;
     unknown: Localized;

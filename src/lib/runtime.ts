@@ -1,12 +1,13 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { CHARACTERS, GUESTS, JUDGMENTS, placeById } from "./catalog";
+import { CHARACTERS, GUESTS, JUDGMENTS, makeCommunityCharacter, placeById } from "./catalog";
 import { applyJudgment } from "./train";
 import type {
   AxisId,
   Character,
   CharacterId,
   Judgment,
+  PlaceKind,
   Thread,
   TourCall,
 } from "./types";
@@ -16,6 +17,7 @@ export type RuntimeState = {
   weights: Partial<Record<CharacterId, Record<AxisId, number>>>;
   threads: Thread[];
   tourLog: TourCall[];
+  extras: Character[];
 };
 
 const FILE = join(
@@ -27,12 +29,13 @@ function empty(): RuntimeState {
   return {
     judgments: JUDGMENTS,
     weights: {},
+    extras: [],
     threads: [
       {
-        id: "demo-maya-nuri",
-        guestId: "maya",
+        id: "demo-visitor-maya",
+        guestId: "visitor",
         guestName: GUESTS[0].name,
-        characterId: "nuri",
+        characterId: "maya",
         lang: "en",
         messages: [
           {
@@ -44,7 +47,7 @@ function empty(): RuntimeState {
           {
             id: "d2",
             role: "character",
-            text: "I kept the no-pork constraint. Muhak-ro Chicken Soup — 38 guests staying here actually went.",
+            text: "I picked from pork-free places. Muhak-ro Chicken Soup — a place this character has actually judged.",
             placeIds: ["muhak-dak", "itaewon-kebab", "euljiro-nogari"],
             createdAt: "2026-09-18T11:00:02.000Z",
           },
@@ -59,10 +62,30 @@ function empty(): RuntimeState {
 
 let mem: RuntimeState | null = null;
 
+function normalize(raw: Partial<RuntimeState>): RuntimeState {
+  const base = empty();
+  const byId = new Map(JUDGMENTS.map((j) => [j.id, j]));
+  for (const j of raw.judgments ?? []) byId.set(j.id, j);
+  return {
+    judgments: [...byId.values()],
+    weights: raw.weights ?? {},
+    threads: raw.threads?.length ? raw.threads : base.threads,
+    tourLog: raw.tourLog ?? [],
+    extras: (raw.extras ?? []).map((c) => ({
+      ...c,
+      origin: c.origin ?? "community",
+      trainerNote: c.trainerNote ?? {
+        ko: "커뮤니티 캐릭터",
+        en: "Community character",
+      },
+    })),
+  };
+}
+
 function load(): RuntimeState {
   if (mem) return mem;
   try {
-    mem = JSON.parse(readFileSync(FILE, "utf8")) as RuntimeState;
+    mem = normalize(JSON.parse(readFileSync(FILE, "utf8")) as Partial<RuntimeState>);
     return mem;
   } catch {
     mem = empty();
@@ -80,20 +103,75 @@ function save(state: RuntimeState) {
   }
 }
 
+export function ingestOverlay(overlay?: {
+  judgments?: Judgment[];
+  weights?: Partial<Record<CharacterId, Record<AxisId, number>>>;
+  extras?: Character[];
+}) {
+  if (!overlay) return load();
+  const state = load();
+  if (overlay.judgments?.length) {
+    const byId = new Map(state.judgments.map((j) => [j.id, j]));
+    for (const j of overlay.judgments) byId.set(j.id, j);
+    state.judgments = [...byId.values()];
+  }
+  if (overlay.weights) {
+    state.weights = { ...state.weights, ...overlay.weights };
+  }
+  if (overlay.extras?.length) {
+    const byId = new Map(state.extras.map((c) => [c.id, c]));
+    for (const c of overlay.extras) byId.set(c.id, { ...c, origin: "community" });
+    state.extras = [...byId.values()];
+  }
+  save(state);
+  return state;
+}
+
 export function getRuntime(): RuntimeState {
   return load();
 }
 
-export function trainedCharacters(): Character[] {
+export function roster(): Character[] {
   const state = load();
-  return CHARACTERS.map((c) => {
+  const byId = new Map<string, Character>();
+  for (const c of CHARACTERS) byId.set(c.id, c);
+  for (const c of state.extras) byId.set(c.id, { ...c, origin: "community" });
+  return [...byId.values()].map((c) => {
     const w = state.weights[c.id];
     return w ? { ...c, weights: { ...c.weights, ...w } } : c;
   });
 }
 
+export function trainedCharacters(): Character[] {
+  return roster();
+}
+
 export function trainedCharacter(id: CharacterId): Character {
-  return trainedCharacters().find((c) => c.id === id) ?? CHARACTERS[0];
+  return roster().find((c) => c.id === id) ?? roster().find((c) => c.id === "maya") ?? CHARACTERS[0];
+}
+
+export function addCharacter(input: {
+  name: string;
+  nameKo?: string;
+  trainedBy: string;
+  trainedByKo?: string;
+  coverage?: string;
+  porkFree?: boolean;
+  kinds?: PlaceKind[];
+}): Character {
+  const state = load();
+  let id = input.name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9가-힣]+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (!id || CHARACTERS.some((c) => c.id === id) || state.extras.some((c) => c.id === id)) {
+    id = `${id || "c"}-${Date.now().toString(36)}`;
+  }
+  const character = makeCommunityCharacter({ ...input, id });
+  state.extras = [character, ...state.extras];
+  save(state);
+  return character;
 }
 
 export function addJudgment(j: Judgment, weights: Record<AxisId, number>) {

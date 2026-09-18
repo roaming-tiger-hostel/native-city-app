@@ -1,9 +1,9 @@
 import { CHARACTERS, placeById } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
-import { addJudgment, addThread, correctThread, getRuntime, trainedCharacters } from "@/lib/runtime";
+import { addCharacter, addJudgment, addThread, correctThread, getRuntime, trainedCharacters } from "@/lib/runtime";
 import { applyJudgment } from "@/lib/train";
-import type { CharacterId, Judgment, Place, Thread } from "@/lib/types";
+import type { CharacterId, Judgment, Place, PlaceKind, Thread } from "@/lib/types";
 
 export async function GET() {
   const runtime = getRuntime();
@@ -15,7 +15,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = (await req.json()) as {
-    op?: "judge" | "thread" | "correct";
+    op?: "judge" | "thread" | "correct" | "create";
     characterId?: CharacterId;
     winnerId?: string;
     loserId?: string;
@@ -23,7 +23,29 @@ export async function POST(req: Request) {
     places?: Place[];
     thread?: Thread;
     threadId?: string;
+    character?: {
+      name?: string;
+      nameKo?: string;
+      trainedBy?: string;
+      trainedByKo?: string;
+      coverage?: string;
+      porkFree?: boolean;
+      kinds?: PlaceKind[];
+    };
   };
+
+  if (body.op === "create" && body.character?.name && body.character.trainedBy) {
+    const created = addCharacter({
+      name: body.character.name,
+      nameKo: body.character.nameKo,
+      trainedBy: body.character.trainedBy,
+      trainedByKo: body.character.trainedByKo,
+      coverage: body.character.coverage,
+      porkFree: body.character.porkFree,
+      kinds: body.character.kinds,
+    });
+    return Response.json({ ...getRuntime(), characters: trainedCharacters(), created });
+  }
 
   if (body.op === "thread" && body.thread) {
     return Response.json(addThread(body.thread));
@@ -49,8 +71,8 @@ export async function POST(req: Request) {
       winnerId: body.winnerId,
       loserId: body.loserId,
       reason: {
-        ko: body.reason || "호스트 판정",
-        en: body.reason || "Host judgment",
+        ko: body.reason || "트레이너 판정",
+        en: body.reason || "Trainer judgment",
       },
       createdAt: new Date().toISOString().slice(0, 10),
     };

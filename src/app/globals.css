@@ -44,6 +44,12 @@ body {
   color: var(--ink);
 }
 
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
 body {
   font-family: var(--font-sans), "Noto Sans KR", sans-serif;
 }

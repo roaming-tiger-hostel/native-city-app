@@ -6,7 +6,11 @@ export function pairForTraining(
   places: Place[],
   seen: Set<string>,
 ): [Place, Place] | null {
-  const pool = places.filter((p) => character.kinds.includes(p.kind));
+  const pool = places.filter((p) => {
+    if (!character.kinds.includes(p.kind)) return false;
+    if (character.porkFree && p.porkFree === false) return false;
+    return true;
+  });
   let best: [Place, Place] | null = null;
   let bestGap = Infinity;
   for (let i = 0; i < pool.length; i++) {

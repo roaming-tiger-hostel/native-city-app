@@ -1,24 +1,26 @@
-import { GUESTS, PLACES, guestById } from "@/lib/catalog";
+import { PLACES, guestById } from "@/lib/catalog";
 import { classifyIntent, greeting, mergePlaces, runEngine } from "@/lib/engine";
-import { addThread, getRuntime, trainedCharacter } from "@/lib/runtime";
-import { hydrateAroundHostel, searchKeyword, tourConfigured } from "@/lib/tourapi";
-import type { CharacterId, ChatMessage, Place, TourStatus } from "@/lib/types";
+import { addThread, getRuntime, ingestOverlay, trainedCharacter } from "@/lib/runtime";
+import { hydrateAroundHostel, searchKeyword, tourCacheGeneration, tourConfigured } from "@/lib/tourapi";
+import type { AxisId, Character, CharacterId, ChatMessage, Judgment, Place, TourStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-let cache: { at: number; places: Place[]; status: TourStatus } | null = null;
+let cache: { at: number; gen: number; places: Place[]; status: TourStatus } | null = null;
 
 async function catalog() {
   if (!tourConfigured()) {
+    cache = null;
     return {
       places: PLACES,
       status: { live: false, error: "TOUR_API_KEY 없음 — 시드 캐시 사용", endpoint: "seed" } satisfies TourStatus,
     };
   }
-  if (cache && Date.now() - cache.at < 10 * 60_000) return cache;
+  const gen = tourCacheGeneration();
+  if (cache && cache.gen === gen && Date.now() - cache.at < 10 * 60_000) return cache;
   const live = await hydrateAroundHostel();
   const places = live.status.live ? mergePlaces(PLACES, live.places) : PLACES;
-  cache = { at: Date.now(), places, status: live.status };
+  cache = { at: Date.now(), gen, places, status: live.status };
   return cache;
 }
 
@@ -43,12 +45,18 @@ export async function POST(req: Request) {
     greet?: boolean;
     threadId?: string;
     history?: ChatMessage[];
+    overlay?: {
+      judgments?: Judgment[];
+      weights?: Partial<Record<CharacterId, Record<AxisId, number>>>;
+      extras?: Character[];
+    };
   };
+  if (body.overlay) ingestOverlay(body.overlay);
   const cataloged = await catalog();
   let places = cataloged.places;
   const status = cataloged.status;
-  const guest = guestById(body.guestId ?? GUESTS[0].id);
-  const characterId = body.characterId ?? "nuri";
+  const guest = guestById(body.guestId ?? "visitor");
+  const characterId = body.characterId ?? "maya";
   const character = trainedCharacter(characterId);
   const runtime = getRuntime();
   const lang = body.lang ?? guest.language;
@@ -77,7 +85,7 @@ export async function POST(req: Request) {
 
   if (body.greet) {
     return Response.json({
-      message: greeting(characterId, lang),
+      message: greeting(character, lang),
       result: null,
       status,
     });

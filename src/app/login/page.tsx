@@ -16,7 +16,7 @@ function LoginForm() {
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
       <p className="text-[11px] tracking-wide text-ink-soft uppercase">2026 관광데이터 활용 공모전</p>
       <h1 className="display mt-2 text-4xl">Native City</h1>
-      <p className="mt-2 text-sm text-ink-soft">심사 테스트 계정. 손님과 트레이너가 나뉘어 있다.</p>
+      <p className="mt-2 text-sm text-ink-soft">심사 테스트 계정. 손님은 캐릭터에게 묻고, 트레이너는 캐릭터를 만든다.</p>
       <form
         className="mt-8 space-y-3"
         onSubmit={(e) => {
@@ -60,8 +60,8 @@ function LoginForm() {
         <button className="w-full rounded-md bg-ink py-2 text-sm text-card">들어가기</button>
       </form>
       <ul className="mt-8 space-y-1 text-xs text-ink-soft">
-        <li>손님 · guest / guest2026</li>
-        <li>트레이너 · trainer / trainer2026</li>
+        <li>손님 · guest / guest2026 · 마야에게 물어보기</li>
+        <li>트레이너 · trainer / trainer2026 · 캐릭터 훈련</li>
       </ul>
     </main>
   );

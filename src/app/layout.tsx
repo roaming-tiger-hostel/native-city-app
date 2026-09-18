@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 
@@ -16,7 +16,13 @@ const display = Fraunces({
 export const metadata: Metadata = {
   title: "Native City — 믿을 수 있는 현지인 친구",
   description:
-    "한 명의 호스트가 여러 AI 캐릭터를 훈련시켜, 외국인 여행자에게 취향 있는 현지 친구를 만들어 주는 서비스.",
+    "한국에 오래 사는 사람이 자기 AI 캐릭터를 훈련한다. 손님은 그 캐릭터에게 묻는다. 캐릭터는 사람인 척하지 않는다.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

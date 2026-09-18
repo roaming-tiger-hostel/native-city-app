@@ -1,6 +1,6 @@
-import { CHARACTERS, PLACES } from "@/lib/catalog";
+import { PLACES } from "@/lib/catalog";
 import { mergePlaces } from "@/lib/engine";
-import { getRuntime } from "@/lib/runtime";
+import { getRuntime, trainedCharacters } from "@/lib/runtime";
 import { detailCommon, hydrateAroundHostel, searchKeyword, tourConfigured } from "@/lib/tourapi";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +55,6 @@ export async function GET(req: Request) {
       rule: "Facts (hours, coords, closed) may override. Taste never does.",
     },
     tourLog: getRuntime().tourLog,
-    characters: CHARACTERS.map((c) => c.id),
+    characters: trainedCharacters().map((c) => ({ id: c.id, origin: c.origin, name: c.name })),
   });
 }

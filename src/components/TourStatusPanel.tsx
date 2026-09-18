@@ -27,7 +27,7 @@ export function TourStatusPanel() {
     <div className="space-y-3 rounded-lg border border-line bg-card p-4 text-sm">
       <div>
         현재 이 배포의 TourAPI:{" "}
-        <strong>{live ? "실시간 호출 (결과코드 0000)" : "시드 캐시 — TOUR_API_KEY 없음. 엔드포인트·스키마는 동일"}</strong>
+        <strong>{live ? "실시간 호출 (결과코드 0000)" : "시드 캐시 — 인증키가 없거나 호출 실패. 엔드포인트·스키마는 동일"}</strong>
       </div>
       <p className="text-xs text-ink-soft">
         {data?.status?.endpoint ?? "KorService2+EngService2 / locationBasedList2"}
