@@ -186,7 +186,7 @@ export const PLACES: Place[] = [
     neighborhood: { ko: "성수동", en: "Seongsu" },
     address: { ko: "서울 성동구 뚝섬로 273", en: "273 Ttukseom-ro, Seongdong-gu, Seoul" },
     overview: {
-      ko: "성수 옆 큰 공원. 호스텔에서 도보·짧은  hop으로 닿는 외국인 게스트의 기본 코스.",
+      ko: "성수 옆 큰 공원. 호스텔에서 도보·한 정거장으로 닿는 외국인 게스트의 기본 코스.",
       en: "Large park next to Seongsu. Default walk for hostel guests — close enough to go without a plan.",
     },
     note: {

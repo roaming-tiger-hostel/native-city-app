@@ -32,7 +32,8 @@ export default function SubmitPage() {
             <strong>지도 패인.</strong> 화면 아래 지도에 호스텔과 추천 장소를 띄운다.
           </li>
           <li>
-            <strong>스튜디오 하네스.</strong> 모델이 헷갈리는 A/B 쌍만 호스트에게 물어 판정 기준을 갱신한다.
+            <strong>스튜디오 하네스.</strong> 모델이 헷갈리는 A/B 쌍만 호스트에게 물어 판정 기준을 갱신한다. 손님
+            대화의 1순위가 틀리면 2순위를 이긴 쪽으로 교정한다.
           </li>
           <li>
             <strong>TourAPI 동기화.</strong> 위치기반 목록으로 사실(영업·좌표·영문 표기)을 갱신한다. 취향 점수는 덮지
@@ -46,7 +47,7 @@ export default function SubmitPage() {
         <ul className="list-disc space-y-2 pl-5 leading-relaxed">
           <li>
             엔드포인트: <code>KorService2/locationBasedList2</code>, <code>EngService2/locationBasedList2</code>,{" "}
-            <code>searchKeyword2</code>
+            <code>searchKeyword2</code>, <code>detailCommon2</code>
           </li>
           <li>기준점: 로밍타이거 호스텔(서울 성동구 무학동) 반경 4km. 음식(39)·관광지(12).</li>
           <li>영문 표기는 EngService2로 병합. 손님 화면 출처 배지에 공사 API를 명시.</li>
@@ -110,9 +111,11 @@ export default function SubmitPage() {
           <li>오른쪽 결정 패인에서 장소를 고르고, 아래 지도 핀이 따라가는지 확인.</li>
           <li>소리로 바꿔 같은 질문을 한다. 커버리지·함정 거부가 달라지는지 확인.</li>
           <li>
-            <Link href="/studio">스튜디오</Link>에서 소리의 판정 하네스로 A/B를 하나 남긴다.
+            <Link href="/studio">스튜디오</Link>에서 소리의 판정 하네스로 A/B를 하나 남긴다. 손님 화면으로 돌아가 같은
+            질문을 하면 순위가 바뀐다.
           </li>
-          <li>장소 탭에서 TourAPI 동기화 배지를 확인한다.</li>
+          <li>장소 탭에서 TourAPI 동기화·searchKeyword2 로그(결과코드 0000 또는 키 없음)를 확인한다.</li>
+          <li>대화 탭에서 손님 스레드의 “1순위 교정”을 누른다.</li>
         </ol>
       </section>
 

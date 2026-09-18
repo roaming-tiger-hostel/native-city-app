@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTERS, GUESTS, HOSTEL, PLACES, characterById, guestById, placeById } from "@/lib/catalog";
-import { greeting } from "@/lib/engine";
+import { greeting, withDistance } from "@/lib/engine";
 import { readSession } from "@/lib/session";
 import type {
   CharacterId,
@@ -49,14 +49,20 @@ export function GuestApp() {
   const [pending, setPending] = useState(false);
   const [rightOpen, setRightOpen] = useState(true);
   const [mapRatio, setMapRatio] = useState(0.42);
+  const [threadId] = useState(() => crypto.randomUUID());
+  const [tourLog, setTourLog] = useState<{ path: string; ok: boolean; service: string }[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
 
   const character = characterById(characterId);
   const guest = guestById(guestId);
   const selected = selectedId ? placeById(selectedId, places) : undefined;
   const mapPlaces = useMemo(() => {
-    const ids = focusIds.length ? focusIds : places.slice(0, 8).map((p) => p.id);
-    return ids.map((id) => placeById(id, places)).filter((p): p is Place => Boolean(p));
+    if (focusIds.length) {
+      return focusIds.map((id) => placeById(id, places)).filter((p): p is Place => Boolean(p));
+    }
+    return withDistance(places)
+      .sort((a, b) => (a.distMeters ?? 9e9) - (b.distMeters ?? 9e9))
+      .slice(0, 10);
   }, [focusIds, places]);
 
   const activeKey = `${characterId}:${lang}`;
@@ -77,6 +83,7 @@ export function GuestApp() {
         if (session?.guestId) setGuestId(session.guestId);
         if (Array.isArray(data.places)) setPlaces(data.places);
         if (data.status) setStatus(data.status);
+        if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
       })
       .catch(() => undefined);
   }, []);
@@ -101,7 +108,14 @@ export function GuestApp() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ characterId, guestId, message: trimmed, lang }),
+        body: JSON.stringify({
+          characterId,
+          guestId,
+          message: trimmed,
+          lang,
+          threadId,
+          history: [...messages, userMsg],
+        }),
       });
       const data = await res.json();
       if (data.message) setMessages((m) => [...m, data.message]);
@@ -115,6 +129,7 @@ export function GuestApp() {
         setRightOpen(true);
       }
       if (data.status) setStatus(data.status);
+      if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
     } finally {
       setPending(false);
     }
@@ -155,6 +170,11 @@ export function GuestApp() {
           </Link>
           <span className="hidden text-[11px] tracking-wide text-ink-soft uppercase sm:inline">
             {lang === "ko" ? "손님" : "Guest"}
+          </span>
+          <span
+            className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${status?.live ? "bg-seed/15 text-seed" : "bg-paper-2 text-ink-soft"}`}
+          >
+            {status?.live ? "TourAPI live" : "TourAPI seed"}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -283,8 +303,17 @@ export function GuestApp() {
           </div>
 
           <div className="map-wrap relative min-h-[140px]" style={{ flex: mapRatio }}>
-            <MapCanvas places={mapPlaces} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setTab("context"); setRightOpen(true); }} />
-            <div className="absolute top-2 left-2 rounded-md bg-card/90 px-2 py-1 text-[10px] text-ink-soft">
+            <MapCanvas
+              lang={lang}
+              places={mapPlaces}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                setSelectedId(id);
+                setTab("context");
+                setRightOpen(true);
+              }}
+            />
+            <div className="absolute top-2 left-2 z-[500] rounded-md bg-card/90 px-2 py-1 text-[10px] text-ink-soft">
               {HOSTEL.name[lang]} · {lang === "ko" ? "아래 지도" : "map pane"}
             </div>
           </div>
@@ -317,6 +346,7 @@ export function GuestApp() {
                   place={selected}
                   sources={sources}
                   status={status}
+                  tourLog={tourLog}
                 />
               ) : (
                 <DecisionBody lang={lang} decision={decision} places={places} onPick={pickOption} />
@@ -338,6 +368,7 @@ function ContextBody({
   place,
   sources,
   status,
+  tourLog,
 }: {
   lang: Lang;
   guestName: string;
@@ -347,6 +378,7 @@ function ContextBody({
   place?: Place;
   sources: SourceBadge[];
   status?: TourStatus;
+  tourLog: { path: string; ok: boolean; service: string }[];
 }) {
   return (
     <div className="space-y-4 text-sm">
@@ -414,6 +446,11 @@ function ContextBody({
                 : "Seed cache until TOUR_API_KEY is set"}
           </div>
         )}
+        {tourLog[0] ? (
+          <div className="text-[10px] text-ink-soft">
+            last {tourLog[0].service}/{tourLog[0].path} {tourLog[0].ok ? "ok" : "fail"}
+          </div>
+        ) : null}
       </section>
     </div>
   );

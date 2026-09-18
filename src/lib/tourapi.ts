@@ -1,3 +1,4 @@
+import { recordTourCall } from "./runtime";
 import type { ContentType, Localized, Place, TourStatus } from "./types";
 
 const BASE = {
@@ -97,7 +98,18 @@ async function tourGet(
   params: Record<string, string>,
 ): Promise<{ ok: true; items: TourItem[]; raw: unknown } | { ok: false; error: string }> {
   const key = serviceKey();
-  if (!key) return { ok: false, error: "TOUR_API_KEY missing" };
+  const service = family === "eng" ? "EngService2" : "KorService2";
+  if (!key) {
+    recordTourCall({
+      at: new Date().toISOString(),
+      service,
+      path,
+      params,
+      ok: false,
+      error: "TOUR_API_KEY missing",
+    });
+    return { ok: false, error: "TOUR_API_KEY missing" };
+  }
 
   const url = new URL(`${BASE[family]}/${path}`);
   url.searchParams.set("serviceKey", key);
@@ -107,7 +119,17 @@ async function tourGet(
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
   const res = await fetch(url.toString(), { cache: "no-store" });
-  if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+  if (!res.ok) {
+    recordTourCall({
+      at: new Date().toISOString(),
+      service,
+      path,
+      params,
+      ok: false,
+      error: `HTTP ${res.status}`,
+    });
+    return { ok: false, error: `HTTP ${res.status}` };
+  }
 
   const json = (await res.json()) as {
     response?: {
@@ -119,15 +141,27 @@ async function tourGet(
 
   const platform = json.OpenAPI_ServiceResponse?.cmmMsgHeader;
   if (platform) {
-    return { ok: false, error: platform.returnAuthMsg || platform.errMsg || "OpenAPI platform error" };
+    const error = platform.returnAuthMsg || platform.errMsg || "OpenAPI platform error";
+    recordTourCall({ at: new Date().toISOString(), service, path, params, ok: false, error });
+    return { ok: false, error };
   }
 
   const code = json.response?.header?.resultCode;
   if (code && code !== "0000") {
-    return { ok: false, error: json.response?.header?.resultMsg || code };
+    const error = json.response?.header?.resultMsg || code;
+    recordTourCall({ at: new Date().toISOString(), service, path, params, ok: false, error });
+    return { ok: false, error };
   }
 
   const items = asArray(json.response?.body?.items?.item);
+  recordTourCall({
+    at: new Date().toISOString(),
+    service,
+    path,
+    params,
+    ok: true,
+    count: items.length,
+  });
   return { ok: true, items, raw: json };
 }
 
@@ -248,5 +282,23 @@ export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: 
       error: live ? undefined : error,
       lang: "ko+en",
     },
+  };
+}
+
+export async function detailCommon(contentId: string, lang: "ko" | "en" = "ko") {
+  const family = lang === "en" ? "eng" : "kor";
+  const result = await tourGet(family, "detailCommon2", { contentId });
+  if (!result.ok) {
+    return { place: null as Place | null, status: { live: false, error: result.error, endpoint: `${family}/detailCommon2`, lang } satisfies TourStatus };
+  }
+  const item = result.items[0];
+  return {
+    place: item ? normalizeTourItem(item, lang) : null,
+    status: {
+      live: true,
+      endpoint: `${family === "eng" ? "EngService2" : "KorService2"}/detailCommon2`,
+      count: item ? 1 : 0,
+      lang,
+    } satisfies TourStatus,
   };
 }

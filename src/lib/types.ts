@@ -144,3 +144,24 @@ export type TourStatus = {
   error?: string;
   lang?: string;
 };
+
+export type TourCall = {
+  at: string;
+  service: string;
+  path: string;
+  params: Record<string, string>;
+  ok: boolean;
+  count?: number;
+  error?: string;
+};
+
+export type Thread = {
+  id: string;
+  guestId: string;
+  guestName: string;
+  characterId: CharacterId;
+  lang: Lang;
+  messages: ChatMessage[];
+  placeIds: string[];
+  updatedAt: string;
+};

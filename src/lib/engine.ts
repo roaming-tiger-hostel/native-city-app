@@ -271,8 +271,10 @@ export function runEngine(opts: {
   judgments?: Judgment[];
   usedLiveKto?: boolean;
   lang?: Lang;
+  character?: Character;
 }): EngineResult {
-  const character = CHARACTERS.find((c) => c.id === opts.characterId) ?? CHARACTERS[0];
+  const character =
+    opts.character ?? CHARACTERS.find((c) => c.id === opts.characterId) ?? CHARACTERS[0];
   const places = opts.places ?? PLACES;
   const intent = classifyIntent(opts.message);
   const ranked = rankPlaces({

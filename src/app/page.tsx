@@ -47,6 +47,16 @@ export default function Home() {
           ))}
         </section>
 
+        <section className="mt-16 rounded-2xl border border-line bg-card p-6">
+          <h3 className="text-xs tracking-wide text-ink-soft uppercase">한국관광공사 OpenAPI</h3>
+          <p className="display mt-2 text-3xl">사실만 덮는다. 취향은 안 덮는다.</p>
+          <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+            호스텔 좌표 기준 <code>KorService2</code> / <code>EngService2</code>의{" "}
+            <code>locationBasedList2</code>, <code>searchKeyword2</code>, <code>detailCommon2</code>. 폐점·좌표·영문
+            표기는 API가 이기고, “맛있다”는 호스트 판정이 이긴다. 스튜디오 장소 탭에 호출 로그(결과코드 0000)가 남는다.
+          </p>
+        </section>
+
         <section className="mt-16 grid gap-8 md:grid-cols-2">
           <div className="rounded-2xl border border-line bg-card p-6">
             <h3 className="text-xs tracking-wide text-ink-soft uppercase">Guest</h3>

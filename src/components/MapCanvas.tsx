@@ -3,15 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { Map as LeafletMap, Marker } from "leaflet";
 import { HOSTEL } from "@/lib/catalog";
-import type { Place } from "@/lib/types";
+import type { Lang, Place } from "@/lib/types";
 
 type Props = {
   places: Place[];
   selectedId?: string;
   onSelect: (id: string) => void;
+  lang?: Lang;
 };
 
-export function MapCanvas({ places, selectedId, onSelect }: Props) {
+export function MapCanvas({ places, selectedId, onSelect, lang = "en" }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
@@ -31,8 +32,9 @@ export function MapCanvas({ places, selectedId, onSelect }: Props) {
         zoomControl: false,
         scrollWheelZoom: true,
       }).setView([HOSTEL.lat, HOSTEL.lng], 14);
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-        attribution: "&copy; OpenStreetMap &copy; CARTO",
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+        maxZoom: 19,
       }).addTo(map);
       L.control.zoom({ position: "topright" }).addTo(map);
       mapRef.current = map;
@@ -63,7 +65,7 @@ export function MapCanvas({ places, selectedId, onSelect }: Props) {
         iconAnchor: [7, 7],
       });
       const hostel = L.marker([HOSTEL.lat, HOSTEL.lng], { icon: hostelIcon }).addTo(map);
-      hostel.bindTooltip(HOSTEL.name.en, { direction: "top" });
+      hostel.bindTooltip(HOSTEL.name[lang], { direction: "top" });
       markersRef.current.push(hostel);
 
       for (const place of places) {
@@ -77,7 +79,7 @@ export function MapCanvas({ places, selectedId, onSelect }: Props) {
         });
         const marker = L.marker([place.lat, place.lng], { icon }).addTo(map);
         marker.on("click", () => onSelectRef.current(place.id));
-        marker.bindTooltip(place.title.en, { direction: "top" });
+        marker.bindTooltip(place.title[lang], { direction: "top" });
         markersRef.current.push(marker);
       }
 
@@ -92,7 +94,7 @@ export function MapCanvas({ places, selectedId, onSelect }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [places, selectedId, ready]);
+  }, [places, selectedId, ready, lang]);
 
   useEffect(() => {
     const map = mapRef.current;

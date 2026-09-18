@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AXES, CHARACTERS, JUDGMENTS, PLACES, placeById } from "@/lib/catalog";
-import { applyJudgment, evalHoldout, pairForTraining, score } from "@/lib/train";
-import type { Character, CharacterId, Judgment, Lang, Place, TourStatus } from "@/lib/types";
+import { mergePlaces } from "@/lib/engine";
+import { evalHoldout, pairForTraining, score } from "@/lib/train";
+import type { Character, CharacterId, Judgment, Lang, Place, Thread, TourStatus } from "@/lib/types";
 
 type Tab = "train" | "places" | "characters" | "conversations";
 
@@ -15,41 +16,62 @@ export function StudioApp() {
   const [characters, setCharacters] = useState(CHARACTERS);
   const [places, setPlaces] = useState<Place[]>(PLACES);
   const [judgments, setJudgments] = useState<Judgment[]>(JUDGMENTS);
+  const [threads, setThreads] = useState<Thread[]>([]);
   const [status, setStatus] = useState<TourStatus>();
+  const [tourLog, setTourLog] = useState<{ service: string; path: string; ok: boolean; error?: string }[]>([]);
   const [syncing, setSyncing] = useState(false);
 
   const character = characters.find((c) => c.id === characterId) ?? characters[0];
 
+  function applyRuntime(data: {
+    judgments?: Judgment[];
+    characters?: Character[];
+    threads?: Thread[];
+    tourLog?: { service: string; path: string; ok: boolean; error?: string }[];
+  }) {
+    if (Array.isArray(data.judgments)) setJudgments(data.judgments);
+    if (Array.isArray(data.characters)) setCharacters(data.characters);
+    if (Array.isArray(data.threads)) setThreads(data.threads);
+    if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
+  }
+
   useEffect(() => {
-    fetch("/api/tour")
-      .then((r) => r.json())
-      .then((data) => {
-        const saved = localStorage.getItem("native-city-judgments");
-        if (saved) {
-          try {
-            setJudgments(JSON.parse(saved) as Judgment[]);
-          } catch {
-            /* ignore */
-          }
-        }
-        if (Array.isArray(data.places)) setPlaces(data.places);
-        setStatus(data.status);
+    Promise.all([fetch("/api/runtime").then((r) => r.json()), fetch("/api/tour").then((r) => r.json())])
+      .then(([runtime, tour]) => {
+        applyRuntime(runtime);
+        if (Array.isArray(tour.places)) setPlaces(tour.places);
+        setStatus(tour.status);
+        if (Array.isArray(tour.tourLog)) setTourLog(tour.tourLog);
       })
       .catch(() => undefined);
   }, []);
 
-  function persist(next: Judgment[]) {
-    setJudgments(next);
-    localStorage.setItem("native-city-judgments", JSON.stringify(next));
+  async function persistJudge(winnerId: string, loserId: string, reason: string) {
+    const res = await fetch("/api/runtime", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        op: "judge",
+        characterId,
+        winnerId,
+        loserId,
+        reason,
+        places,
+      }),
+    });
+    applyRuntime(await res.json());
   }
 
-  async function syncTour() {
+  async function syncTour(q?: string) {
     setSyncing(true);
     try {
-      const res = await fetch("/api/tour");
+      const res = await fetch(q ? `/api/tour?q=${encodeURIComponent(q)}` : "/api/tour");
       const data = await res.json();
-      if (Array.isArray(data.places)) setPlaces(data.places);
-      setStatus(data.status);
+      if (Array.isArray(data.places)) {
+        setPlaces(q && data.places.length ? mergePlaces(places, data.places) : data.places.length ? data.places : places);
+      }
+      if (data.status) setStatus(data.status);
+      if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
     } finally {
       setSyncing(false);
     }
@@ -117,19 +139,37 @@ export function StudioApp() {
               character={character}
               places={places}
               judgments={judgments}
-              onJudge={(j, nextChar) => {
-                persist([j, ...judgments]);
-                setCharacters((cs) => cs.map((c) => (c.id === nextChar.id ? nextChar : c)));
-              }}
+              onJudge={(j) => persistJudge(j.winnerId, j.loserId, j.reason.ko)}
             />
           ) : null}
           {tab === "places" ? (
-            <PlaceBoard lang={lang} places={places} status={status} syncing={syncing} onSync={syncTour} />
+            <PlaceBoard
+              lang={lang}
+              places={places}
+              status={status}
+              syncing={syncing}
+              onSync={() => syncTour()}
+              onSearch={(q) => syncTour(q)}
+              tourLog={tourLog}
+            />
           ) : null}
           {tab === "characters" ? (
             <CharacterBoard lang={lang} character={character} judgments={judgments} places={places} />
           ) : null}
-          {tab === "conversations" ? <ConversationBoard lang={lang} /> : null}
+          {tab === "conversations" ? (
+            <ConversationBoard
+              lang={lang}
+              threads={threads}
+              onCorrect={async (id) => {
+                const res = await fetch("/api/runtime", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ op: "correct", threadId: id }),
+                });
+                applyRuntime(await res.json());
+              }}
+            />
+          ) : null}
         </main>
       </div>
     </div>
@@ -157,7 +197,7 @@ function TrainBoard({
   character: Character;
   places: Place[];
   judgments: Judgment[];
-  onJudge: (j: Judgment, next: Character) => void;
+  onJudge: (j: Judgment) => void;
 }) {
   const seen = useMemo(() => {
     const s = new Set<string>();
@@ -190,7 +230,7 @@ function TrainBoard({
       },
       createdAt: new Date().toISOString().slice(0, 10),
     };
-    onJudge(j, applyJudgment(character, winner, loser));
+    onJudge(j);
     setReason("");
   }
 
@@ -261,16 +301,21 @@ function PlaceBoard({
   status,
   syncing,
   onSync,
+  onSearch,
+  tourLog,
 }: {
   lang: Lang;
   places: Place[];
   status?: TourStatus;
   syncing: boolean;
   onSync: () => void;
+  onSearch: (q: string) => void;
+  tourLog: { service: string; path: string; ok: boolean; error?: string }[];
 }) {
+  const [q, setQ] = useState("");
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="display text-3xl">{lang === "ko" ? "장소 · 사실 레이어" : "Places · fact layer"}</h1>
           <p className="mt-1 text-sm text-ink-soft">
@@ -285,6 +330,39 @@ function PlaceBoard({
           {syncing ? "…" : lang === "ko" ? "TourAPI 동기화" : "Sync TourAPI"}
         </button>
       </div>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (q.trim()) onSearch(q.trim());
+        }}
+      >
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={lang === "ko" ? "searchKeyword2 · 예: 성수 맛집" : "searchKeyword2 · e.g. Seongsu food"}
+          className="flex-1 rounded-md border border-line bg-card px-3 py-2 text-sm"
+        />
+        <button className="rounded-md border border-line px-3 py-2 text-sm">
+          {lang === "ko" ? "키워드 검색" : "Keyword"}
+        </button>
+      </form>
+      {tourLog.length ? (
+        <div className="rounded-lg border border-line bg-card p-3 text-xs text-ink-soft">
+          <div className="mb-1 tracking-wide uppercase">{lang === "ko" ? "최근 OpenAPI 호출" : "Recent OpenAPI calls"}</div>
+          {tourLog.slice(0, 8).map((c, i) => (
+            <div key={`${c.path}-${i}`}>
+              {c.service}/{c.path} · {c.ok ? "0000 OK" : c.error}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-ink-soft">
+          {lang === "ko"
+            ? "동기화하면 locationBasedList2 호출이 여기에 남는다. 키가 없으면 TOUR_API_KEY missing 으로 찍힌다."
+            : "Sync writes locationBasedList2 calls here. Without a key the log shows TOUR_API_KEY missing."}
+        </p>
+      )}
       <table className="w-full text-left text-sm">
         <thead className="text-[10px] tracking-wide text-ink-soft uppercase">
           <tr>
@@ -355,15 +433,46 @@ function CharacterBoard({
   );
 }
 
-function ConversationBoard({ lang }: { lang: Lang }) {
+function ConversationBoard({
+  lang,
+  threads,
+  onCorrect,
+}: {
+  lang: Lang;
+  threads: Thread[];
+  onCorrect: (id: string) => void;
+}) {
   return (
-    <div className="mx-auto max-w-xl space-y-3">
+    <div className="mx-auto max-w-2xl space-y-4">
       <h1 className="display text-3xl">{lang === "ko" ? "손님 대화" : "Guest threads"}</h1>
       <p className="text-sm text-ink-soft">
         {lang === "ko"
-          ? "손님 화면에서 나눈 대화가 여기로 쌓인다. 잘못된 추천은 판정 하네스로 되돌린다."
-          : "Guest threads collect here. Bad recs go back into the harness."}
+          ? "손님 화면 대화가 여기로 쌓인다. 1순위가 틀리면 2순위를 이긴 쪽으로 교정한다."
+          : "Guest threads land here. Correct flips 1st and 2nd into a judgment."}
       </p>
+      {threads.map((t) => (
+        <article key={t.id} className="rounded-xl border border-line bg-card p-4">
+          <div className="text-xs text-ink-soft">
+            {t.guestName} · {t.characterId} · {t.lang}
+          </div>
+          <div className="mt-2 space-y-1 text-sm">
+            {t.messages.slice(-4).map((m) => (
+              <div key={m.id} className={m.role === "guest" ? "text-ink-soft" : ""}>
+                {m.role === "guest" ? "G · " : "C · "}
+                {m.text}
+              </div>
+            ))}
+          </div>
+          {t.placeIds.length >= 2 ? (
+            <button
+              onClick={() => onCorrect(t.id)}
+              className="mt-3 rounded-md border border-line px-3 py-1.5 text-xs"
+            >
+              {lang === "ko" ? "1순위 교정 (2순위가 이김)" : "Correct: 2nd should have won"}
+            </button>
+          ) : null}
+        </article>
+      ))}
       <Link href="/guest" className="inline-block rounded-md bg-ink px-3 py-2 text-sm text-card">
         {lang === "ko" ? "손님 화면에서 시연" : "Open guest demo"}
       </Link>

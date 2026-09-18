@@ -31,7 +31,16 @@ function LoginForm() {
       >
         <label className="block text-sm">
           계정
-          <select value={id} onChange={(e) => setId(e.target.value)} className="mt-1 w-full rounded-md border border-line bg-card px-3 py-2">
+          <select
+            value={id}
+            onChange={(e) => {
+              const next = e.target.value;
+              setId(next);
+              const acc = TEST_ACCOUNTS.find((a) => a.id === next);
+              if (acc) setPassword(acc.password);
+            }}
+            className="mt-1 w-full rounded-md border border-line bg-card px-3 py-2"
+          >
             {TEST_ACCOUNTS.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.id} — {a.label.ko}
