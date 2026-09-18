@@ -1,11 +1,29 @@
 import Link from "next/link";
+import { getRuntime } from "@/lib/runtime";
+import { tourConfigured } from "@/lib/tourapi";
+
+export const dynamic = "force-dynamic";
 
 export default function SubmitPage() {
+  const configured = tourConfigured();
+  const log = getRuntime().tourLog.slice(0, 8);
+
   return (
     <article className="mx-auto max-w-3xl px-6 py-16">
       <p className="text-[11px] tracking-wide text-ink-soft uppercase">1차 심사 · 기능설명서</p>
       <h1 className="display mt-2 text-5xl">Native City</h1>
       <p className="mt-3 text-ink-soft">믿을 수 있는 현지인 친구 AI · 웹 서비스</p>
+      <p className="mt-4 text-sm">
+        데모:{" "}
+        <a href="https://native-city.vercel.app" className="underline">
+          https://native-city.vercel.app
+        </a>
+        {" · "}
+        코드:{" "}
+        <a href="https://github.com/roaming-tiger-hostel/native-city-app" className="underline">
+          github.com/roaming-tiger-hostel/native-city-app
+        </a>
+      </p>
 
       <section className="mt-12 space-y-3">
         <h2 className="display text-2xl">1. 서비스 한 줄</h2>
@@ -20,7 +38,7 @@ export default function SubmitPage() {
         <h2 className="display text-2xl">2. 주요 기능</h2>
         <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
           <li>
-            <strong>손님 대화.</strong> 캐릭터(누리/소리/달)와 다국어 대화. 세그먼트 제약(할랄, 심야 등)을 반영한다.
+            <strong>손님 대화.</strong> 캐릭터(누리/소리/달)와 한·영 대화. 세그먼트 제약(할랄, 심야 등)을 반영한다.
           </li>
           <li>
             <strong>컨텍스트 패인.</strong> 선택된 장소의 주소·개요·출처·게스트 시드 로그를 보여 준다.
@@ -36,8 +54,8 @@ export default function SubmitPage() {
             대화의 1순위가 틀리면 2순위를 이긴 쪽으로 교정한다.
           </li>
           <li>
-            <strong>TourAPI 동기화.</strong> 위치기반 목록으로 사실(영업·좌표·영문 표기)을 갱신한다. 취향 점수는 덮지
-            않는다.
+            <strong>TourAPI 동기화.</strong> 위치기반 목록·키워드 검색으로 사실(영업·좌표·영문 표기)을 갱신한다. 취향
+            점수는 덮지 않는다.
           </li>
         </ol>
       </section>
@@ -56,10 +74,23 @@ export default function SubmitPage() {
             판정이 이긴다.
           </li>
         </ul>
-        <p className="text-sm text-ink-soft">
-          로컬 실행 시 <code>.env.local</code>에 <code>TOUR_API_KEY</code>(data.go.kr 일반 인증키)를 넣으면 실시간
-          호출로 전환된다. 키가 없으면 동일 스키마의 시드 캐시로 기능 심사가 가능하다.
+        <p className="rounded-md border border-line bg-card px-3 py-2 text-sm">
+          현재 이 배포의 TourAPI:{" "}
+          <strong>{configured ? "실시간 (TOUR_API_KEY)" : "시드 캐시 — 키 없음. 스키마·엔드포인트는 동일"}</strong>
         </p>
+        {log.length ? (
+          <ul className="font-mono text-xs text-ink-soft">
+            {log.map((c, i) => (
+              <li key={`${c.at}-${i}`}>
+                {c.service}/{c.path} · {c.ok ? "0000 OK" : c.error}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-soft">
+            스튜디오 장소 탭에서 「TourAPI 동기화」를 누르면 locationBasedList2 호출이 여기에 남는다.
+          </p>
+        )}
       </section>
 
       <section className="mt-10 space-y-3">
@@ -119,7 +150,17 @@ export default function SubmitPage() {
         </ol>
       </section>
 
-      <p className="mt-16 text-sm">
+      <section className="mt-10 space-y-3">
+        <h2 className="display text-2xl">6. 발전 방향</h2>
+        <p className="leading-relaxed">
+          1단계는 로밍타이거 호스텔의 실제 손님 로그로 캐릭터를 가르친다. 2단계는 같은 하네스를 다른 숙소에 빌려
+          주고, 호스트가 자기 캐릭터를 훈련하게 한다. 3단계는 외국인 손님이 실제로 고른 동선을 공사·RTO에 환원할 수
+          있는 집계로 만든다. 추천을 광고로 팔지 않는 것이 전제다.
+        </p>
+      </section>
+
+      <p className="mt-16 text-sm text-ink-soft">팀 Tiger Uppercut · 이응진 / 남연주 · 로밍타이거 호스텔</p>
+      <p className="mt-4 text-sm">
         <Link href="/" className="underline">
           처음으로
         </Link>

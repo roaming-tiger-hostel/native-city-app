@@ -4,6 +4,9 @@
 
 2026 관광데이터 활용 공모전(웹·앱 개발) 제출용.
 
+- 데모: https://native-city.vercel.app
+- 코드: https://github.com/roaming-tiger-hostel/native-city-app
+
 ## 화면
 
 | 경로 | 누구 |
