@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CHARACTERS, HOSTEL, PLACES, characterById, communityCharacters, houseCharacters, placeById } from "@/lib/catalog";
 import { greeting, withDistance } from "@/lib/engine";
-import { readOverlay } from "@/lib/overlay";
+import { readOverlay, writeOverlay } from "@/lib/overlay";
+import { PaneShell } from "@/components/panes/PaneShell";
+import { readSession } from "@/lib/session";
 import type {
   Character,
   CharacterId,
@@ -15,12 +17,11 @@ import type {
   Lang,
   Place,
   SourceBadge,
+  Thread,
   TourStatus,
 } from "@/lib/types";
 
 const MapCanvas = dynamic(() => import("../MapCanvas").then((m) => m.MapCanvas), { ssr: false });
-
-type MobilePane = "chat" | "map" | "context";
 
 function chipsFor(character: Character, lang: Lang): string[] {
   if (character.porkFree || character.id === "maya") {
@@ -53,27 +54,39 @@ function chipsFor(character: Character, lang: Lang): string[] {
     : ["Where do people staying here actually go?", "Hungry. Somewhere close."];
 }
 
+function mergeThreads(a: Thread[] = [], b: Thread[] = []) {
+  const byId = new Map<string, Thread>();
+  for (const t of a) byId.set(t.id, t);
+  for (const t of b) byId.set(t.id, t);
+  return [...byId.values()].sort((x, y) => y.updatedAt.localeCompare(x.updatedAt));
+}
+
+function previewOf(thread: Thread) {
+  const last = [...thread.messages].reverse().find((m) => m.role !== "system");
+  return last?.text ?? "";
+}
+
 export function GuestApp() {
   const [lang, setLang] = useState<Lang>("en");
+  const [view, setView] = useState<"home" | "chat">("home");
   const [roster, setRoster] = useState<Character[]>(CHARACTERS);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [threadId, setThreadId] = useState<string | undefined>();
   const [characterId, setCharacterId] = useState<CharacterId>("maya");
-  const [messages, setMessages] = useState<ChatMessage[]>(() => [greeting("maya", "en")]);
-  const [threadKey, setThreadKey] = useState("maya:en");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [places, setPlaces] = useState<Place[]>(PLACES);
   const [focusIds, setFocusIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [decision, setDecision] = useState<EngineResult["decision"]>();
   const [sources, setSources] = useState<SourceBadge[]>([]);
   const [status, setStatus] = useState<TourStatus>();
-  const [tab, setTab] = useState<"context" | "decision">("context");
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
-  const [rightOpen, setRightOpen] = useState(true);
-  const [mapRatio, setMapRatio] = useState(0.42);
-  const [pane, setPane] = useState<MobilePane>("chat");
-  const [threadId] = useState(() => crypto.randomUUID());
+  const [deepenOpen, setDeepenOpen] = useState(false);
+  const [mapRatio, setMapRatio] = useState(0.4);
   const [tourLog, setTourLog] = useState<{ path: string; ok: boolean; service: string }[]>([]);
-  const [wide, setWide] = useState(false);
+  const [voice, setVoice] = useState<"qwen" | "engine">("engine");
+  const [llmOn, setLlmOn] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const placesRef = useRef(places);
 
@@ -81,6 +94,8 @@ export function GuestApp() {
   const selected = selectedId ? placeById(selectedId, places) : undefined;
   const house = houseCharacters(roster);
   const community = communityCharacters(roster);
+  const guestId = readSession()?.guestId ?? "visitor";
+  const inbox = threads.filter((t) => t.guestId === guestId);
   const mapPlaces = useMemo(() => {
     if (focusIds.length) {
       return focusIds.map((id) => placeById(id, places)).filter((p): p is Place => Boolean(p));
@@ -90,32 +105,70 @@ export function GuestApp() {
       .slice(0, 10);
   }, [focusIds, places]);
 
-  const activeKey = `${characterId}:${lang}`;
-  if (activeKey !== threadKey) {
-    setThreadKey(activeKey);
-    setMessages([greeting(character, lang)]);
+  function persistThreads(next: Thread[]) {
+    setThreads(next);
+    writeOverlay({ threads: next });
+  }
+
+  function openThread(thread: Thread) {
+    setThreadId(thread.id);
+    setCharacterId(thread.characterId);
+    setMessages(thread.messages.length ? thread.messages : [greeting(characterById(thread.characterId, roster), lang)]);
+    setFocusIds(thread.placeIds);
+    setSelectedId(thread.placeIds[0]);
     setDecision(undefined);
     setSources([]);
-    setFocusIds([]);
-    setSelectedId(undefined);
-    setPane("chat");
+    setView("chat");
+  }
+
+  function startChat(id: CharacterId) {
+    const ch = characterById(id, roster);
+    const thread: Thread = {
+      id: crypto.randomUUID(),
+      guestId: readSession()?.guestId ?? "visitor",
+      guestName: readSession()?.name ?? "Visitor",
+      characterId: id,
+      lang,
+      messages: [greeting(ch, lang)],
+      placeIds: [],
+      updatedAt: new Date().toISOString(),
+    };
+    persistThreads(mergeThreads([thread], threads));
+    openThread(thread);
   }
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
-    const apply = () => setWide(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
+    if (mq.matches) setDeepenOpen(true);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/secrets")
+      .then((r) => r.json())
+      .then((data) => setLlmOn(Boolean(data.llm?.configured)))
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
     Promise.all([fetch("/api/runtime").then((r) => r.json()), fetch("/api/tour").then((r) => r.json())])
-      .then(([runtime, data]) => {
-        if (Array.isArray(runtime.characters) && runtime.characters.length) {
-          setRoster(runtime.characters);
-        }
+      .then(async ([runtime, data]) => {
         const overlay = readOverlay();
+        if (overlay && (overlay.extras.length || overlay.judgments.length || overlay.threads.length)) {
+          const hydrated = await fetch("/api/runtime", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ op: "overlay", ...overlay }),
+          }).then((r) => r.json());
+          if (Array.isArray(hydrated.characters) && hydrated.characters.length) {
+            setRoster(hydrated.characters);
+          }
+          if (Array.isArray(hydrated.threads)) {
+            persistThreads(mergeThreads(overlay.threads, hydrated.threads));
+          }
+        } else {
+          if (Array.isArray(runtime.characters) && runtime.characters.length) setRoster(runtime.characters);
+          if (Array.isArray(runtime.threads)) persistThreads(runtime.threads);
+        }
         if (overlay?.extras?.length) {
           setRoster((prev) => {
             const byId = new Map(prev.map((c) => [c.id, c]));
@@ -128,6 +181,8 @@ export function GuestApp() {
         if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
       })
       .catch(() => undefined);
+    // persistThreads is local and overlay-backed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -166,7 +221,7 @@ export function GuestApp() {
 
   async function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || pending) return;
+    if (!trimmed || pending || !threadId) return;
     setDraft("");
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -174,36 +229,50 @@ export function GuestApp() {
       text: trimmed,
       createdAt: new Date().toISOString(),
     };
-    setMessages((m) => [...m, userMsg]);
+    const pendingHistory = [...messages, userMsg];
+    setMessages(pendingHistory);
     setPending(true);
     try {
+      const overlay = readOverlay();
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           characterId,
-          guestId: "visitor",
+          guestId: readSession()?.guestId ?? "visitor",
           message: trimmed,
           lang,
           threadId,
-          history: [...messages, userMsg],
-          overlay: readOverlay() ?? undefined,
+          history: pendingHistory,
+          overlay: overlay ?? undefined,
         }),
       });
       const data = await res.json();
-      if (data.message) setMessages((m) => [...m, data.message]);
+      const nextMessages = data.message ? [...pendingHistory, data.message as ChatMessage] : pendingHistory;
+      setMessages(nextMessages);
       if (data.result) {
         const result = data.result as EngineResult;
         setFocusIds(result.placeIds);
         setSelectedId(result.contextPlaceId);
         setDecision(result.decision);
         setSources(result.sources);
-        setTab(result.decision ? "decision" : "context");
-        setRightOpen(true);
-        if (!wide) setPane(result.decision ? "context" : "chat");
+        setDeepenOpen(true);
       }
+      if (data.voice === "qwen" || data.voice === "engine") setVoice(data.voice);
+      if (data.llm?.configured != null) setLlmOn(Boolean(data.llm.configured));
       if (data.status) setStatus(data.status);
       if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
+      const updated: Thread = {
+        id: threadId,
+        guestId: readSession()?.guestId ?? "visitor",
+        guestName: readSession()?.name ?? "Visitor",
+        characterId,
+        lang,
+        messages: nextMessages.slice(-12),
+        placeIds: (data.result as EngineResult | undefined)?.placeIds ?? focusIds,
+        updatedAt: new Date().toISOString(),
+      };
+      persistThreads(mergeThreads([updated], Array.isArray(data.threads) ? data.threads : threads));
     } finally {
       setPending(false);
     }
@@ -211,11 +280,10 @@ export function GuestApp() {
 
   function pickOption(option: DecisionOption) {
     setSelectedId(option.placeId);
-    setTab("context");
     const place = placeById(option.placeId, places);
-    if (!place) return;
-    setMessages((m) => [
-      ...m,
+    if (!place || !threadId) return;
+    const nextMessages: ChatMessage[] = [
+      ...messages,
       {
         id: crypto.randomUUID(),
         role: "guest",
@@ -232,269 +300,305 @@ export function GuestApp() {
         placeIds: [place.id],
         createdAt: new Date().toISOString(),
       },
-    ]);
-    if (!wide) setPane("chat");
+    ];
+    setMessages(nextMessages);
+    setDeepenOpen(true);
+    persistThreads(
+      mergeThreads(
+        [
+          {
+            id: threadId,
+            guestId: readSession()?.guestId ?? "visitor",
+            guestName: readSession()?.name ?? "Visitor",
+            characterId,
+            lang,
+            messages: nextMessages.slice(-12),
+            placeIds: [place.id],
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+        threads,
+      ),
+    );
   }
 
-  const context = (
-    <ContextBody
-      lang={lang}
-      character={character}
-      place={selected}
-      sources={sources}
-      status={status}
-      tourLog={tourLog}
-    />
+  const headerBits = (
+    <>
+      <button
+        onClick={() => setLang((l) => (l === "en" ? "ko" : "en"))}
+        className="shrink-0 rounded-md border border-line px-2 py-1 text-xs"
+      >
+        {lang.toUpperCase()}
+      </button>
+      <Link href="/studio" className="shrink-0 text-xs text-ink-soft hover:text-ink">
+        Studio
+      </Link>
+    </>
   );
-  const decisionBody = <DecisionBody lang={lang} decision={decision} places={places} onPick={pickOption} />;
+
+  if (view === "home") {
+    return (
+      <div className="pane-shell flex flex-col overflow-hidden bg-paper">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
+          <Link href="/" className="display shrink-0 text-lg">
+            Native City
+          </Link>
+          <span className="hidden shrink-0 text-[11px] tracking-wide text-ink-soft uppercase sm:inline">
+            {lang === "ko" ? "손님" : "Guest"}
+          </span>
+          <span
+            className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] sm:inline ${
+              status?.live ? "bg-seed/15 text-seed" : "bg-paper-2 text-ink-soft"
+            }`}
+          >
+            {status?.live ? "TourAPI live" : "TourAPI seed"}
+          </span>
+          <span className="hidden shrink-0 rounded-full bg-paper-2 px-2 py-0.5 text-[10px] text-ink-soft sm:inline">
+            {llmOn ? "Qwen" : lang === "ko" ? "규칙 엔진" : "rule engine"}
+          </span>
+          <div className="min-w-0 flex-1" />
+          {headerBits}
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <p className="text-[11px] tracking-wide text-ink-soft uppercase">
+            {lang === "ko" ? "대화" : "Chats"}
+          </p>
+          <div className="mt-2 space-y-2">
+            {inbox.length ? (
+              inbox.map((thread) => {
+                const ch = characterById(thread.characterId, roster);
+                return (
+                  <button
+                    key={thread.id}
+                    onClick={() => openThread(thread)}
+                    className="flex w-full items-start gap-3 rounded-2xl border border-line bg-card px-3 py-3 text-left hover:border-ink"
+                  >
+                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: ch.color }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium">{ch.name[lang]}</span>
+                        <span className="text-[10px] text-ink-soft">
+                          {new Date(thread.updatedAt).toLocaleString(lang === "ko" ? "ko-KR" : "en", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </span>
+                      <span className="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-soft">{previewOf(thread)}</span>
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <p className="rounded-2xl border border-dashed border-line px-3 py-4 text-sm text-ink-soft">
+                {lang === "ko"
+                  ? "아직 대화가 없다. 아래에서 캐릭터를 고르면 새 채팅이 열린다."
+                  : "No chats yet. Pick a character below to start one."}
+              </p>
+            )}
+          </div>
+
+          <p className="mt-8 text-[11px] tracking-wide text-ink-soft uppercase">
+            {lang === "ko" ? "캐릭터에게 물어보기" : "Ask a character"}
+          </p>
+          <p className="mt-1 text-xs text-ink-soft">
+            {lang === "ko"
+              ? "캐릭터는 AI다. 사람인 척하지 않는다. 새 대화를 열려면 고른다."
+              : "Characters are AI. They do not pretend to be human. Tap one to start a new chat."}
+          </p>
+          <div className="mt-3">
+            <p className="text-[10px] tracking-wide text-ink-soft uppercase">
+              {lang === "ko" ? "커뮤니티" : "Community"}
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {community.map((c) => (
+                <CharacterCard key={c.id} character={c} lang={lang} onPick={() => startChat(c.id)} />
+              ))}
+            </div>
+          </div>
+          <div className="mt-6 pb-8">
+            <p className="text-[10px] tracking-wide text-ink-soft uppercase">
+              {lang === "ko" ? "기본 · 사업자" : "House"}
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {house.map((c) => (
+                <CharacterCard key={c.id} character={c} lang={lang} onPick={() => startChat(c.id)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const deepen = (
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4">
+      <DeepenBody
+        lang={lang}
+        character={character}
+        place={selected}
+        sources={sources}
+        status={status}
+        tourLog={tourLog}
+        decision={decision}
+        places={places}
+        voice={voice}
+        llmOn={llmOn}
+        onPick={pickOption}
+      />
+    </div>
+  );
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-paper">
-      <header className="flex shrink-0 flex-col gap-2 border-b border-line px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <Link href="/" className="display text-lg">
-              Native City
-            </Link>
-            <span className="hidden text-[11px] tracking-wide text-ink-soft uppercase sm:inline">
-              {lang === "ko" ? "손님" : "Guest"}
-            </span>
-            <span
-              className={`hidden rounded-full px-2 py-0.5 text-[10px] sm:inline ${status?.live ? "bg-seed/15 text-seed" : "bg-paper-2 text-ink-soft"}`}
-            >
-              {status?.live ? "TourAPI live" : "TourAPI seed"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <button
-              onClick={() => setLang((l) => (l === "en" ? "ko" : "en"))}
-              className="rounded-md border border-line px-2 py-1 text-xs"
-            >
-              {lang.toUpperCase()}
-            </button>
-            <Link href="/studio" className="text-xs text-ink-soft hover:text-ink">
-              Studio
-            </Link>
-          </div>
-        </div>
-        <select
-          value={characterId}
-          onChange={(e) => setCharacterId(e.target.value)}
-          className="w-full rounded-md border border-line bg-card px-2 py-2 text-sm lg:hidden"
-        >
-          <optgroup label={lang === "ko" ? "커뮤니티 (유저가 훈련)" : "Community (user-trained)"}>
-            {community.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name[lang]} · {c.trainedBy[lang]}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label={lang === "ko" ? "기본 (사업자)" : "House (operator)"}>
-            {house.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name[lang]} · {c.trainedBy[lang]}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-        <div className="hidden min-w-0 flex-1 items-center justify-center gap-1 overflow-x-auto lg:flex">
-          {community.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setCharacterId(c.id)}
-              className={`shrink-0 rounded-full px-3 py-1 text-sm ${characterId === c.id ? "text-card" : "hover:bg-paper-2"}`}
-              style={characterId === c.id ? { background: c.color } : undefined}
-            >
-              {c.name[lang]}
-            </button>
-          ))}
-          <span className="mx-1 h-4 w-px shrink-0 bg-line" />
-          {house.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setCharacterId(c.id)}
-              className={`shrink-0 rounded-full px-3 py-1 text-sm ${characterId === c.id ? "text-card" : "hover:bg-paper-2"}`}
-              style={characterId === c.id ? { background: c.color } : undefined}
-            >
-              {c.name[lang]}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => setRightOpen((v) => !v)}
-          className={`hidden rounded-md px-2 py-1 text-xs lg:inline ${rightOpen ? "bg-paper-2" : "hover:bg-paper-2"}`}
-        >
-          {lang === "ko" ? "컨텍스트" : "Context"}
-        </button>
-      </header>
-
-      <div className="flex min-h-0 flex-1">
-        <section className="flex min-w-0 flex-1 flex-col">
-          <div
-            className={`min-h-0 flex-col ${pane === "chat" ? "flex flex-1" : "hidden"} lg:flex`}
-            style={wide ? { flex: 1 - mapRatio } : undefined}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2">
-              <div className="min-w-0">
-                <div className="text-sm font-medium">{character.name[lang]}</div>
-                <div className="truncate text-[11px] text-ink-soft">
-                  {character.origin === "community"
-                    ? lang === "ko"
-                      ? `${character.trainedBy.ko}가 훈련 · 이 캐릭터에게 물어보는 중`
-                      : `Trained by ${character.trainedBy.en} · you are asking this character`
-                    : character.short[lang]}
-                </div>
-              </div>
-              <span className="hidden shrink-0 rounded-full bg-paper-2 px-2 py-0.5 text-[10px] text-ink-soft sm:inline">
-                {lang === "ko" ? "AI 캐릭터 · 사람인 척하지 않음" : "AI character · not pretending to be human"}
-              </span>
-            </div>
-            <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-              {messages.map((m) => (
-                <div key={m.id} className={`flex ${m.role === "guest" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                      m.role === "guest"
-                        ? "rounded-br-sm bg-ink text-card"
-                        : "rounded-bl-sm border border-line bg-card"
-                    }`}
-                  >
-                    {m.text}
-                  </div>
-                </div>
-              ))}
-              {pending ? <div className="text-xs text-ink-soft">{character.name[lang]}…</div> : null}
-              {messages.length <= 1 ? (
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {chipsFor(character, lang).map((chip) => (
-                    <button
-                      key={chip}
-                      onClick={() => send(chip)}
-                      className="rounded-full border border-line bg-card px-3 py-1.5 text-left text-xs hover:border-ink"
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <form
-              className="shrink-0 border-t border-line p-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                send(draft);
-              }}
-            >
-              <div className="flex gap-2">
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={
-                    lang === "ko" ? `${character.name.ko}에게 물어보기` : `Ask ${character.name.en}`
-                  }
-                  className="flex-1 rounded-md border border-line bg-card px-3 py-2 text-sm outline-none"
-                />
-                <button className="rounded-md bg-ink px-4 py-2 text-sm text-card">
-                  {lang === "ko" ? "보내기" : "Send"}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <div
-            role="separator"
-            onPointerDown={(e) => {
-              const start = e.clientY;
-              const startRatio = mapRatio;
-              const onMove = (ev: PointerEvent) => {
-                const parent = e.currentTarget.parentElement?.getBoundingClientRect().height ?? 1;
-                setMapRatio(Math.min(0.7, Math.max(0.22, startRatio + (start - ev.clientY) / parent)));
-              };
-              const onUp = () => {
-                window.removeEventListener("pointermove", onMove);
-                window.removeEventListener("pointerup", onUp);
-              };
-              window.addEventListener("pointermove", onMove);
-              window.addEventListener("pointerup", onUp);
-            }}
-            className="hidden h-3 cursor-row-resize items-center justify-center border-y border-line bg-paper-2 lg:flex"
-          >
-            <div className="h-1 w-10 rounded-full bg-line" />
-          </div>
-
-          <div
-            className={`map-wrap relative min-h-0 w-full ${
-              pane === "map" ? "flex flex-1" : "h-0 overflow-hidden opacity-0 lg:h-auto lg:opacity-100"
-            } lg:block`}
-            style={wide ? { flex: mapRatio } : undefined}
-          >
-            <MapCanvas
-              lang={lang}
-              places={mapPlaces}
-              selectedId={selectedId}
-              active={wide || pane === "map"}
-              onSelect={(id) => {
-                setSelectedId(id);
-                setTab("context");
-                setRightOpen(true);
-                if (!wide) setPane("context");
-              }}
-            />
-            <div className="absolute top-2 left-2 z-[500] rounded-md bg-card/90 px-2 py-1 text-[10px] text-ink-soft">
-              {HOSTEL.name[lang]} · {lang === "ko" ? "지도" : "map"}
-            </div>
-          </div>
-        </section>
-
-        <aside
-          className={`${pane === "context" ? "flex flex-1" : "hidden"} min-w-0 flex-col overflow-hidden border-line bg-card lg:flex lg:w-[360px] lg:shrink-0 lg:flex-none lg:border-l ${rightOpen ? "" : "lg:hidden"}`}
-        >
-          <div className="flex border-b border-line text-sm">
-            <button
-              onClick={() => setTab("context")}
-              className={`flex-1 py-2 ${tab === "context" ? "bg-paper-2 font-medium" : ""}`}
-            >
-              {lang === "ko" ? "컨텍스트" : "Context"}
-            </button>
-            <button
-              onClick={() => setTab("decision")}
-              className={`flex-1 py-2 ${tab === "decision" ? "bg-paper-2 font-medium" : ""}`}
-            >
-              {lang === "ko" ? "결정" : "Decision"}
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">{tab === "context" ? context : decisionBody}</div>
-        </aside>
-      </div>
-
-      <nav className="flex shrink-0 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] lg:hidden">
-        {(
-          [
-            ["chat", lang === "ko" ? "대화" : "Chat"],
-            ["map", lang === "ko" ? "지도" : "Map"],
-            ["context", lang === "ko" ? "결정" : "Pick"],
-          ] as const
-        ).map(([id, label]) => (
+    <PaneShell
+      deepenOpen={deepenOpen}
+      onDeepenToggle={() => setDeepenOpen((v) => !v)}
+      deepenLabel={lang === "ko" ? "심화" : "Deepen"}
+      evidenceRatio={mapRatio}
+      onEvidenceRatio={setMapRatio}
+      header={
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
           <button
-            key={id}
-            onClick={() => setPane(id)}
-            className={`flex-1 py-3 text-sm ${pane === id ? "bg-paper-2 font-medium" : "text-ink-soft"}`}
+            type="button"
+            onClick={() => setView("home")}
+            className="shrink-0 rounded-md px-2 py-1 text-xs hover:bg-paper-2"
           >
-            {label}
+            {lang === "ko" ? "목록" : "Chats"}
           </button>
-        ))}
-      </nav>
-    </div>
+          <span className="display min-w-0 truncate text-lg">{character.name[lang]}</span>
+          <span className="hidden shrink-0 rounded-full bg-paper-2 px-2 py-0.5 text-[10px] text-ink-soft sm:inline">
+            {voice === "qwen" ? "Qwen" : llmOn ? (lang === "ko" ? "Qwen 대기" : "Qwen ready") : lang === "ko" ? "규칙 엔진" : "rule engine"}
+          </span>
+          <div className="min-w-0 flex-1" />
+          {headerBits}
+        </header>
+      }
+      action={
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-2 sm:px-4">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{character.name[lang]}</div>
+              <div className="truncate text-[11px] text-ink-soft">
+                {character.origin === "community"
+                  ? lang === "ko"
+                    ? `${character.trainedBy.ko}가 훈련 · 이 캐릭터에게 물어보는 중`
+                    : `Trained by ${character.trainedBy.en} · you are asking this character`
+                  : character.short[lang]}
+              </div>
+            </div>
+            <span className="hidden shrink-0 rounded-full bg-paper-2 px-2 py-0.5 text-[10px] text-ink-soft sm:inline">
+              {lang === "ko" ? "AI 캐릭터 · 사람인 척하지 않음" : "AI character · not pretending to be human"}
+            </span>
+          </div>
+          <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
+            {messages.map((m) => (
+              <div key={m.id} className={`flex ${m.role === "guest" ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                    m.role === "guest"
+                      ? "rounded-br-sm bg-ink text-card"
+                      : "rounded-bl-sm border border-line bg-card"
+                  }`}
+                >
+                  {m.text}
+                </div>
+              </div>
+            ))}
+            {pending ? <div className="text-xs text-ink-soft">{character.name[lang]}…</div> : null}
+            {messages.length <= 1 ? (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {chipsFor(character, lang).map((chip) => (
+                  <button
+                    key={chip}
+                    onClick={() => send(chip)}
+                    className="rounded-full border border-line bg-card px-3 py-1.5 text-left text-xs hover:border-ink"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <form
+            className="shrink-0 border-t border-line p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              send(draft);
+            }}
+          >
+            <div className="flex gap-2">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={lang === "ko" ? `${character.name.ko}에게 물어보기` : `Ask ${character.name.en}`}
+                className="flex-1 rounded-md border border-line bg-card px-3 py-2 text-sm outline-none"
+              />
+              <button className="rounded-md bg-ink px-4 py-2 text-sm text-card">
+                {lang === "ko" ? "보내기" : "Send"}
+              </button>
+            </div>
+          </form>
+        </div>
+      }
+      evidence={
+        <>
+          <MapCanvas
+            lang={lang}
+            places={mapPlaces}
+            selectedId={selectedId}
+            active
+            onSelect={(id) => {
+              setSelectedId(id);
+              setDeepenOpen(true);
+            }}
+          />
+          <div className="absolute top-2 left-2 z-[500] rounded-md bg-card/90 px-2 py-1 text-[10px] text-ink-soft">
+            {HOSTEL.name[lang]} · {lang === "ko" ? "근거 · 지도" : "evidence · map"}
+          </div>
+        </>
+      }
+      deepen={deepen}
+    />
   );
 }
 
-function ContextBody({
+function CharacterCard({
+  character,
+  lang,
+  onPick,
+}: {
+  character: Character;
+  lang: Lang;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="rounded-2xl border border-line bg-card p-4 text-left hover:border-ink"
+    >
+      <span className="flex h-2 w-8 rounded-full" style={{ background: character.color }} />
+      <span className="mt-3 block display text-2xl">{character.name[lang]}</span>
+      <span className="mt-1 block text-[11px] text-ink-soft">{character.trainedBy[lang]}</span>
+      <span className="mt-2 block text-sm leading-relaxed text-ink-soft">{character.short[lang]}</span>
+    </button>
+  );
+}
+
+function DeepenBody({
   lang,
   character,
   place,
   sources,
   status,
   tourLog,
+  decision,
+  places,
+  voice,
+  llmOn,
+  onPick,
 }: {
   lang: Lang;
   character: Character;
@@ -502,34 +606,42 @@ function ContextBody({
   sources: SourceBadge[];
   status?: TourStatus;
   tourLog: { path: string; ok: boolean; service: string }[];
+  decision?: EngineResult["decision"];
+  places: Place[];
+  voice: "qwen" | "engine";
+  llmOn: boolean;
+  onPick: (option: DecisionOption) => void;
 }) {
+  const lastCall = tourLog.find((c) => c.ok) ?? tourLog[0];
   return (
-    <div className="space-y-4 text-sm">
-      <section>
-        <div className="text-[10px] tracking-wide text-ink-soft uppercase">
-          {character.origin === "community"
-            ? lang === "ko"
-              ? "커뮤니티 캐릭터"
-              : "Community character"
-            : lang === "ko"
-              ? "기본 캐릭터"
-              : "House character"}
-        </div>
-        <div className="font-medium">{character.name[lang]}</div>
-        <div className="text-ink-soft">{character.trainedBy[lang]}</div>
-        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{character.trainerNote[lang]}</p>
-        {character.porkFree ? (
-          <div className="mt-2 rounded-full bg-seed/10 px-2 py-0.5 text-[10px] text-seed inline-block">
-            {lang === "ko" ? "돼지 없는 집만" : "pork-free only"}
+    <div className="space-y-5 text-sm">
+      {decision ? (
+        <section className="space-y-3">
+          <div className="text-[10px] tracking-wide text-ink-soft uppercase">
+            {lang === "ko" ? "결정" : "Decision"}
           </div>
-        ) : null}
-      </section>
-      <section>
-        <div className="text-[10px] tracking-wide text-ink-soft uppercase">
-          {lang === "ko" ? "캐릭터 커버리지" : "Coverage"}
-        </div>
-        <div>{character.coverage[lang]}</div>
-      </section>
+          <p>{decision.prompt[lang]}</p>
+          {decision.options.map((opt, i) => {
+            const optionPlace = placeById(opt.placeId, places);
+            if (!optionPlace) return null;
+            const selected = place?.id === optionPlace.id;
+            return (
+              <button
+                key={opt.placeId}
+                onClick={() => onPick(opt)}
+                className={`w-full rounded-lg border p-3 text-left ${
+                  selected ? "border-ink bg-paper-2" : "border-line hover:border-ink"
+                }`}
+              >
+                <div className="text-[10px] text-ink-soft">{i + 1}</div>
+                <div className="font-medium">{optionPlace.title[lang]}</div>
+                <div className="text-xs text-ink-soft">{opt.why[lang]}</div>
+              </button>
+            );
+          })}
+        </section>
+      ) : null}
+
       {place ? (
         <section className="space-y-2 rounded-lg border border-line p-3">
           <div className="text-[10px] tracking-wide text-ink-soft uppercase">
@@ -537,6 +649,7 @@ function ContextBody({
           </div>
           <div className="display text-xl">{place.title[lang]}</div>
           <div className="text-ink-soft">{place.address[lang]}</div>
+          {place.openHours ? <div className="text-xs">{place.openHours[lang]}</div> : null}
           <p className="leading-relaxed">{place.overview[lang]}</p>
           <p className="text-xs leading-relaxed text-ink-soft">{place.note[lang]}</p>
           <div className="flex flex-wrap gap-1">
@@ -555,13 +668,34 @@ function ContextBody({
       ) : (
         <p className="text-ink-soft">
           {lang === "ko"
-            ? "대화하거나 지도를 누르면 여기 사실이 뜬다."
-            : "Talk or tap the map and facts land here."}
+            ? "지도의 점을 누르거나 대화를 시작하면 여기 사실이 뜬다."
+            : "Tap a map pin or start talking and facts land here."}
         </p>
       )}
+
+      <section className="space-y-1">
+        <div className="text-[10px] tracking-wide text-ink-soft uppercase">
+          {lang === "ko" ? "커버리지" : "Coverage"}
+        </div>
+        <p className="text-xs leading-relaxed text-ink-soft">{character.coverage[lang]}</p>
+      </section>
+
       <section className="space-y-1">
         <div className="text-[10px] tracking-wide text-ink-soft uppercase">
           {lang === "ko" ? "출처" : "Sources"}
+        </div>
+        <div className="text-xs text-ink-soft">
+          {voice === "qwen"
+            ? lang === "ko"
+              ? "말투 Qwen · 후보는 판정 엔진 · 사실은 TourAPI"
+              : "Voice Qwen · ranking from the harness · facts from TourAPI"
+            : llmOn
+              ? lang === "ko"
+                ? "Qwen 키는 들어 있으나 이번 답은 규칙 엔진"
+                : "Qwen key is set; this reply used the rule engine"
+              : lang === "ko"
+                ? "규칙 엔진. Studio → 장소에 Qwen 키를 넣으면 말투만 LLM이 맡는다."
+                : "Rule engine. Paste a Qwen key in Studio → Places to voice the reply."}
         </div>
         {sources.length ? (
           sources.map((s) => (
@@ -579,54 +713,12 @@ function ContextBody({
                 : "Seed cache until TOUR_API_KEY is set"}
           </div>
         )}
-        {tourLog[0] ? (
+        {lastCall ? (
           <div className="text-[10px] text-ink-soft">
-            last {tourLog[0].service}/{tourLog[0].path} {tourLog[0].ok ? "ok" : "fail"}
+            last {lastCall.service}/{lastCall.path} {lastCall.ok ? "0000" : "fail"}
           </div>
         ) : null}
       </section>
-    </div>
-  );
-}
-
-function DecisionBody({
-  lang,
-  decision,
-  places,
-  onPick,
-}: {
-  lang: Lang;
-  decision?: EngineResult["decision"];
-  places: Place[];
-  onPick: (option: DecisionOption) => void;
-}) {
-  if (!decision) {
-    return (
-      <p className="text-sm text-ink-soft">
-        {lang === "ko"
-          ? "추천이 나오면 여기서 고른다. 취향은 캐릭터, 결정은 손님."
-          : "When recommendations land, you choose here. Taste is the character's. The decision is yours."}
-      </p>
-    );
-  }
-  return (
-    <div className="space-y-3">
-      <p className="text-sm">{decision.prompt[lang]}</p>
-      {decision.options.map((opt, i) => {
-        const place = placeById(opt.placeId, places);
-        if (!place) return null;
-        return (
-          <button
-            key={opt.placeId}
-            onClick={() => onPick(opt)}
-            className="w-full rounded-lg border border-line p-3 text-left hover:border-ink"
-          >
-            <div className="text-[10px] text-ink-soft">{i + 1}</div>
-            <div className="font-medium">{place.title[lang]}</div>
-            <div className="text-xs text-ink-soft">{opt.why[lang]}</div>
-          </button>
-        );
-      })}
     </div>
   );
 }

@@ -44,9 +44,46 @@ body {
   color: var(--ink);
 }
 
-@supports (padding: env(safe-area-inset-bottom)) {
-  body {
-    padding-bottom: env(safe-area-inset-bottom);
+.pane-shell {
+  height: 100svh;
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  overscroll-behavior: none;
+}
+
+.pane-rail-label {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.pane-sheet-up {
+  animation: pane-up 220ms ease-out;
+}
+
+.pane-sheet-right {
+  animation: pane-from-right 220ms ease-out;
+}
+
+@keyframes pane-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes pane-from-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
   }
 }
 
@@ -67,6 +104,10 @@ body {
 
 .hairline {
   border-color: var(--line);
+}
+
+.map-wrap {
+  overflow: hidden;
 }
 
 .map-wrap .leaflet-container {

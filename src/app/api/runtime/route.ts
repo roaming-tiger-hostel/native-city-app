@@ -1,9 +1,10 @@
 import { CHARACTERS, placeById } from "@/lib/catalog";
+import { addCharacter, addJudgment, addThread, correctThread, getRuntime, ingestOverlay, trainedCharacters } from "@/lib/runtime";
+import type { RuntimeState } from "@/lib/runtime";
+import { applyJudgment } from "@/lib/train";
+import type { Character, CharacterId, Judgment, Place, PlaceKind, Thread } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-import { addCharacter, addJudgment, addThread, correctThread, getRuntime, trainedCharacters } from "@/lib/runtime";
-import { applyJudgment } from "@/lib/train";
-import type { CharacterId, Judgment, Place, PlaceKind, Thread } from "@/lib/types";
 
 export async function GET() {
   const runtime = getRuntime();
@@ -15,7 +16,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = (await req.json()) as {
-    op?: "judge" | "thread" | "correct" | "create";
+    op?: "judge" | "thread" | "correct" | "create" | "overlay";
     characterId?: CharacterId;
     winnerId?: string;
     loserId?: string;
@@ -32,7 +33,21 @@ export async function POST(req: Request) {
       porkFree?: boolean;
       kinds?: PlaceKind[];
     };
+    judgments?: Judgment[];
+    weights?: RuntimeState["weights"];
+    extras?: Character[];
+    threads?: Thread[];
   };
+
+  if (body.op === "overlay") {
+    ingestOverlay({
+      judgments: body.judgments,
+      weights: body.weights,
+      extras: body.extras,
+      threads: body.threads,
+    });
+    return Response.json({ ...getRuntime(), characters: trainedCharacters() });
+  }
 
   if (body.op === "create" && body.character?.name && body.character.trainedBy) {
     const created = addCharacter({

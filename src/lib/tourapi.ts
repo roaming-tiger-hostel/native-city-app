@@ -265,6 +265,18 @@ export async function searchKeyword(keyword: string, lang: "ko" | "en" = "ko") {
 }
 
 export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: TourStatus }> {
+  const eng = await locationBasedList({
+    lat: 37.5639,
+    lng: 127.0296,
+    radius: 4000,
+    lang: "en",
+  });
+  const jpn = await locationBasedList({
+    lat: 37.5639,
+    lng: 127.0296,
+    radius: 4000,
+    lang: "ja",
+  });
   const food = await locationBasedList({
     lat: 37.5639,
     lng: 127.0296,
@@ -278,18 +290,6 @@ export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: 
     radius: 4000,
     contentTypeId: "12",
     lang: "ko",
-  });
-  const eng = await locationBasedList({
-    lat: 37.5639,
-    lng: 127.0296,
-    radius: 4000,
-    lang: "en",
-  });
-  const jpn = await locationBasedList({
-    lat: 37.5639,
-    lng: 127.0296,
-    radius: 4000,
-    lang: "ja",
   });
 
   const byId = new Map<string, Place>();

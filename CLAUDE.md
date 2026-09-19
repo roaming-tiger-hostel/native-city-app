@@ -6,8 +6,8 @@ House defaults: Nuri / Sori / Dal (operator-provided). Community examples: Maya 
 
 ## Layout
 
-- `/guest` — ask a character. Desktop: chat on top, map below, context/decision on the right. Mobile: Chat / Map / Pick tabs.
-- `/studio` — create a character, judgment harness, TourAPI place layer, per-character rubric/DB.
+- `/guest` — character pick and chat list first, then ask. Desktop: chat on top, map below, context/decision on the right. Narrow: 심화 rises from the bottom covering the map.
+- `/studio` — create a character, judgment harness, TourAPI place layer, Qwen key, per-character rubric/DB. Narrow: 이력 opens from the right, 심화 from the bottom.
 - `/submit` — 기능설명서 and test accounts.
 
 ## Rules

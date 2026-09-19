@@ -20,6 +20,9 @@ export default function SubmitPage() {
           github.com/roaming-tiger-hostel/native-city-app
         </a>
       </p>
+      <p className="mt-2 text-xs text-ink-soft">
+        1차 심사용 동작은 Vercel 데모가 기준이다. GitHub 미러는 커밋 주기에 따라 데모보다 늦을 수 있다.
+      </p>
 
       <section className="mt-12 space-y-3">
         <h2 className="display text-2xl">1. 서비스 기획 배경 및 필요성</h2>
@@ -39,13 +42,14 @@ export default function SubmitPage() {
         </p>
         <p className="leading-relaxed">
           지역 특화는 서울 성동권(로밍타이거 호스텔, 무학동)에서 시작한다. 넓은 화면은 위 대화, 아래 지도, 오른쪽
-          컨텍스트/결정. 좁은 화면은 대화·지도·결정 탭. 스튜디오에서 캐릭터를 새로 만들고 A/B 판정으로 그 캐릭터의
-          데이터베이스를 쌓는다. 누리·소리·달은 사업자가 주는 기본 캐릭터다.
+          컨텍스트/결정. 좁은 화면은 같은 세 구역을 유지한다. 심화는 아래에서 덮으며 올라오고, 스튜디오 이력은
+          오른쪽에서 연다. 스튜디오에서 캐릭터를 새로 만들고 A/B 판정으로 그 캐릭터의 데이터베이스를 쌓는다.
+          누리·소리·달은 사업자가 주는 기본 캐릭터다.
         </p>
         <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
           <li>
-            <strong>손님 대화.</strong> 커뮤니티 캐릭터 마야(무슬림 유학생 음식)·톰(영미권 거주자)·유키(일본인
-            점심)에게 묻는다. 기본 캐릭터 누리·소리·달도 고를 수 있다. 한·영.
+            <strong>손님 홈.</strong> 로그인하면 캐릭터 선택과 이전 대화 목록부터 나온다. 마야(무슬림 유학생
+            음식)·톰·유키와 기본 캐릭터 누리·소리·달. 한·영.
           </li>
           <li>
             <strong>컨텍스트 패인.</strong> 누가 훈련했는지, 커버리지, 주소·개요·출처. 취향 이유와 공사 사실을
@@ -55,7 +59,8 @@ export default function SubmitPage() {
             <strong>결정 패인.</strong> 캐릭터 후보를 손님이 확정. 취향은 캐릭터, 결정은 손님.
           </li>
           <li>
-            <strong>지도 패인.</strong> 호스텔 기준 핀. 대화가 장소를 고르면 지도가 따라간다. 모바일에서는 지도 탭.
+            <strong>지도 패인.</strong> 호스텔 기준 핀. 대화가 장소를 고르면 지도가 따라간다. 좁은 화면에서도 아래
+            패널에 그대로 둔다.
           </li>
           <li>
             <strong>스튜디오 하네스.</strong> 새 캐릭터 생성, A/B 판정, 손님 스레드 1순위 교정. 말투가 아니라 어디가
@@ -63,7 +68,7 @@ export default function SubmitPage() {
           </li>
           <li>
             <strong>TourAPI 동기화.</strong> 위치·키워드·상세로 사실만 덮는다. 맛있다는 그 캐릭터의 트레이너 판정이
-            이긴다.
+            이긴다. 말이 필요하면 Qwen(DashScope/OpenRouter)이 그 후보만 문장으로 옮긴다. 키 없으면 규칙 엔진.
           </li>
         </ol>
       </section>
@@ -149,17 +154,27 @@ export default function SubmitPage() {
         <h2 className="display text-2xl">6. 시연 순서</h2>
         <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
           <li>
-            <Link href="/guest">손님 화면</Link>에서 마야(무슬림 유학생 캐릭터)에게 “It&apos;s 11pm and I don&apos;t
-            eat pork.”
+            <Link href="/login">로그인</Link> 후 <Link href="/guest">손님 화면</Link>에서 캐릭터를 고른다. 이전 대화
+            목록이 위에 있다. 마야에게 “It&apos;s 11pm and I don&apos;t eat pork.”
           </li>
-          <li>좁은 화면이면 아래 탭에서 결정·지도를 확인. 넓은 화면이면 오른쪽 결정 패인과 아래 지도 핀.</li>
+          <li>좁은 화면이면 아래 지도와, 밑에서 올라오는 심화에서 결정·사실을 확인. 넓은 화면이면 오른쪽 결정 패인과 아래 지도 핀.</li>
           <li>톰·유키·누리로 바꿔 같은 질문이 어떻게 갈리는지 확인.</li>
           <li>
             <Link href="/studio">스튜디오</Link>에서 새 캐릭터를 만들거나 마야의 판정 하네스로 A/B를 하나 남긴다.
           </li>
-          <li>장소 탭에서 TourAPI 동기화·searchKeyword2 로그를 확인한다.</li>
+          <li>장소 탭에서 TourAPI 동기화·searchKeyword2 로그를 확인한다. Qwen을 쓰려면 같은 탭의 LLM 칸에 DashScope/OpenRouter 키를 넣는다.</li>
           <li>대화 탭에서 손님 스레드의 “1순위 교정”을 누른다.</li>
         </ol>
+      </section>
+
+      <section className="mt-10 space-y-3">
+        <h2 className="display text-2xl">저장</h2>
+        <p className="leading-relaxed">
+          Postgres 같은 원격 DB는 없다. 캐릭터·판정·대화는 로컬 <code>data/runtime/state.json</code>, 브라우저{" "}
+          <code>localStorage</code>(<code>native-city-overlay</code>), Vercel 서버리스의 <code>/tmp</code>에 있다. 같은
+          브라우저를 새로고침하면 대화 목록은 남는다. 인스턴스가 바뀌는 서버리스 <code>/tmp</code>만으로는 심사용 영구
+          DB가 되지 않는다.
+        </p>
       </section>
 
       <p className="mt-16 text-sm text-ink-soft">팀 Tiger Uppercut · 이응진 / 남연주 · 로밍타이거 호스텔</p>

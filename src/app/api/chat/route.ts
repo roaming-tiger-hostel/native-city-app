@@ -1,8 +1,10 @@
 import { PLACES, guestById } from "@/lib/catalog";
 import { classifyIntent, greeting, mergePlaces, runEngine } from "@/lib/engine";
+import { speakWithQwen } from "@/lib/llm";
 import { addThread, getRuntime, ingestOverlay, trainedCharacter } from "@/lib/runtime";
+import { llmKeyStatus } from "@/lib/secrets";
 import { hydrateAroundHostel, searchKeyword, tourCacheGeneration, tourConfigured } from "@/lib/tourapi";
-import type { AxisId, Character, CharacterId, ChatMessage, Judgment, Place, TourStatus } from "@/lib/types";
+import type { AxisId, Character, CharacterId, ChatMessage, Judgment, Place, Thread, TourStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
       judgments?: Judgment[];
       weights?: Partial<Record<CharacterId, Record<AxisId, number>>>;
       extras?: Character[];
+      threads?: Thread[];
     };
   };
   if (body.overlay) ingestOverlay(body.overlay);
@@ -102,26 +105,56 @@ export async function POST(req: Request) {
     lang,
   });
 
+  const history = body.history ?? [];
+  let spoken = result.text[lang];
+  let voice: "qwen" | "engine" = "engine";
+  let llmMeta: { model?: string; provider?: string } = {};
+  try {
+    const llm = await speakWithQwen({
+      character,
+      lang,
+      message: body.message ?? "",
+      history,
+      result,
+      places,
+    });
+    if (llm?.text) {
+      spoken = llm.text;
+      voice = "qwen";
+      llmMeta = { model: llm.model, provider: llm.provider };
+    }
+  } catch {
+    /* keep engine speech */
+  }
+
   const message: ChatMessage = {
     id: crypto.randomUUID(),
     role: "character",
-    text: result.text[lang],
+    text: spoken,
     placeIds: result.placeIds,
     sources: result.sources,
     createdAt: new Date().toISOString(),
   };
 
-  const history = [...(body.history ?? []), message];
+  const nextHistory = [...history, message];
   addThread({
     id: body.threadId ?? crypto.randomUUID(),
     guestId: guest.id,
     guestName: guest.name,
     characterId,
     lang,
-    messages: history.slice(-12),
+    messages: nextHistory.slice(-12),
     placeIds: result.placeIds,
     updatedAt: new Date().toISOString(),
   });
 
-  return Response.json({ message, result, status, tourLog: getRuntime().tourLog.slice(0, 5) });
+  return Response.json({
+    message,
+    result,
+    status,
+    voice,
+    llm: { configured: llmKeyStatus().configured, ...llmMeta },
+    tourLog: getRuntime().tourLog.slice(0, 5),
+    threads: getRuntime().threads,
+  });
 }

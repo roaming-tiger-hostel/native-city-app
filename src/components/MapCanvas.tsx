@@ -51,12 +51,18 @@ export function MapCanvas({ places, selectedId, onSelect, lang = "en", active = 
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready) return;
+    if (!map || !ready || !map.getContainer()) return;
     let cancelled = false;
     (async () => {
       const L = await import("leaflet");
-      if (cancelled) return;
-      markersRef.current.forEach((m) => m.remove());
+      if (cancelled || !mapRef.current) return;
+      markersRef.current.forEach((m) => {
+        try {
+          m.remove();
+        } catch {
+          /* map already torn down */
+        }
+      });
       markersRef.current = [];
 
       const hostelIcon = L.divIcon({
@@ -84,7 +90,7 @@ export function MapCanvas({ places, selectedId, onSelect, lang = "en", active = 
         markersRef.current.push(marker);
       }
 
-      if (places.length) {
+      if (places.length && map.getContainer()?.offsetWidth) {
         const bounds = L.latLngBounds([
           [HOSTEL.lat, HOSTEL.lng],
           ...places.map((p) => [p.lat, p.lng] as [number, number]),
@@ -101,26 +107,37 @@ export function MapCanvas({ places, selectedId, onSelect, lang = "en", active = 
     const map = mapRef.current;
     const el = ref.current;
     if (!map || !ready || !el) return;
+    let timer = 0;
     const invalidate = () => {
-      map.invalidateSize();
-      if (places.length) {
-        const bounds = [
-          [HOSTEL.lat, HOSTEL.lng] as [number, number],
-          ...places.map((p) => [p.lat, p.lng] as [number, number]),
-        ];
-        map.fitBounds(bounds as [number, number][], { padding: [24, 24], maxZoom: 15 });
-      } else {
-        map.setView([HOSTEL.lat, HOSTEL.lng], 14);
-      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const live = mapRef.current;
+        if (!live || !el.offsetWidth || !el.offsetHeight) return;
+        try {
+          live.invalidateSize();
+          if (places.length) {
+            live.fitBounds(
+              [
+                [HOSTEL.lat, HOSTEL.lng],
+                ...places.map((p) => [p.lat, p.lng] as [number, number]),
+              ],
+              { padding: [24, 24], maxZoom: 15 },
+            );
+          } else {
+            live.setView([HOSTEL.lat, HOSTEL.lng], 14);
+          }
+        } catch {
+          /* leaflet throws if a pane was removed mid-resize */
+        }
+      }, 80);
     };
-    const id = window.setTimeout(invalidate, 80);
-    const onResize = () => invalidate();
-    window.addEventListener("resize", onResize);
-    const ro = new ResizeObserver(() => invalidate());
+    invalidate();
+    window.addEventListener("resize", invalidate);
+    const ro = new ResizeObserver(invalidate);
     ro.observe(el);
     return () => {
-      window.clearTimeout(id);
-      window.removeEventListener("resize", onResize);
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", invalidate);
       ro.disconnect();
     };
   }, [ready, places, active]);

@@ -1,52 +1,37 @@
-"use client";
+import { getRuntime } from "@/lib/runtime";
+import { hydrateAroundHostel, tourConfigured } from "@/lib/tourapi";
 
-import { useEffect, useState } from "react";
-
-type Call = { service: string; path: string; ok: boolean; error?: string; count?: number };
-type TourPayload = {
-  configured?: boolean;
-  status?: { live?: boolean; endpoint?: string; error?: string; count?: number };
-  usage?: { services: { name: string; ops: string[] }[]; origin: string; rule: string };
-  tourLog?: Call[];
-};
-
-export function TourStatusPanel() {
-  const [data, setData] = useState<TourPayload>();
-
-  useEffect(() => {
-    fetch("/api/tour")
-      .then((r) => r.json())
-      .then((json: TourPayload) => setData(json))
-      .catch(() => undefined);
-  }, []);
-
-  const live = Boolean(data?.configured && data.status?.live);
-  const log = data?.tourLog ?? [];
+export async function TourStatusPanel() {
+  const configured = tourConfigured();
+  const live = configured ? await hydrateAroundHostel() : null;
+  const log = getRuntime().tourLog;
+  const ok = log.filter((c) => c.ok);
+  const rest = log.filter((c) => !c.ok);
+  const shown = [...ok, ...rest];
+  const isLive = Boolean(configured && live?.status.live);
 
   return (
     <div className="space-y-3 rounded-lg border border-line bg-card p-4 text-sm">
       <div>
         현재 이 배포의 TourAPI:{" "}
-        <strong>{live ? "실시간 호출 (결과코드 0000)" : "시드 캐시 — 인증키가 없거나 호출 실패. 엔드포인트·스키마는 동일"}</strong>
+        <strong>
+          {isLive
+            ? `실시간 호출 (KorService2 결과코드 0000 · ${live?.status.count ?? 0}건)`
+            : "시드 캐시 — 인증키가 없거나 호출 실패. 엔드포인트·스키마는 동일"}
+        </strong>
       </div>
       <p className="text-xs text-ink-soft">
-        {data?.status?.endpoint ?? "KorService2+EngService2 / locationBasedList2"}
-        {data?.status?.count != null ? ` · ${data.status.count}건` : ""}
-        {data?.status?.error ? ` · ${data.status.error}` : ""}
+        {live?.status.endpoint ?? "KorService2 / locationBasedList2"}
+        {live?.status.error ? ` · ${live.status.error}` : ""}
       </p>
-      {data?.usage ? (
-        <ul className="text-xs text-ink-soft">
-          {data.usage.services.map((s) => (
-            <li key={s.name}>
-              {s.name}: {s.ops.join(", ")}
-            </li>
-          ))}
-          <li>{data.usage.rule}</li>
-        </ul>
-      ) : null}
-      {log.length ? (
+      <ul className="text-xs text-ink-soft">
+        <li>KorService2: locationBasedList2, searchKeyword2, detailCommon2</li>
+        <li>EngService2 / JpnService2: 이 키는 미신청. KorService2만 0000이면 데이터 활용은 충족.</li>
+        <li>Facts (hours, coords, closed) may override. Taste never does.</li>
+      </ul>
+      {shown.length ? (
         <ul className="font-mono text-xs text-ink-soft">
-          {log.slice(0, 8).map((c, i) => (
+          {shown.slice(0, 8).map((c, i) => (
             <li key={`${c.path}-${i}`}>
               {c.service}/{c.path} · {c.ok ? "0000 OK" : c.error}
               {c.count != null ? ` · ${c.count}` : ""}

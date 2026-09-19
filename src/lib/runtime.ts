@@ -107,6 +107,7 @@ export function ingestOverlay(overlay?: {
   judgments?: Judgment[];
   weights?: Partial<Record<CharacterId, Record<AxisId, number>>>;
   extras?: Character[];
+  threads?: Thread[];
 }) {
   if (!overlay) return load();
   const state = load();
@@ -122,6 +123,11 @@ export function ingestOverlay(overlay?: {
     const byId = new Map(state.extras.map((c) => [c.id, c]));
     for (const c of overlay.extras) byId.set(c.id, { ...c, origin: "community" });
     state.extras = [...byId.values()];
+  }
+  if (overlay.threads?.length) {
+    const byId = new Map(state.threads.map((t) => [t.id, t]));
+    for (const t of overlay.threads) byId.set(t.id, t);
+    state.threads = [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 40);
   }
   save(state);
   return state;

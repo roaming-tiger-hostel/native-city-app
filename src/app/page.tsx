@@ -83,8 +83,8 @@ export default function Home() {
             <h3 className="text-xs tracking-wide text-ink-soft uppercase">Guest</h3>
             <p className="display mt-2 text-3xl">캐릭터에게 묻는다.</p>
             <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-              마야는 손님이 아니라, 무슬림 유학생이 훈련시킨 음식 친구다. 좁은 화면에서는 대화·지도·결정이 아래 탭으로
-              접힌다. 넓은 화면에서는 위 대화, 아래 지도, 오른쪽 컨텍스트/결정이다.
+              마야는 손님이 아니라, 무슬림 유학생이 훈련시킨 음식 친구다. 로그인하면 캐릭터 선택과 이전 대화 목록부터
+              나온다. 채팅은 위, 지도는 아래, 심화는 오른쪽(좁으면 밑에서 덮음).
             </p>
           </div>
           <div className="rounded-2xl border border-line bg-card p-6">
