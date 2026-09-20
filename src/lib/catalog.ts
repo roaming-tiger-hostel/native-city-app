@@ -81,8 +81,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: false,
     lines: {
       greeting: {
-        ko: "나 누리야. 여기 묵은 손님들이 실제로 어디 갔는지 알려줄게. 배고파? 걷고 싶어?",
-        en: "I'm Nuri. I can tell you where people staying here actually went. Hungry, or want to walk?",
+        ko: "안녕, 누리야! 오늘은 동네에서 뭐 하고 놀까? 밥도 좋고, 산책도 좋아.",
+        en: "Hey, I’m Nuri! What’s the plan today? A bite nearby, or a little walk?",
       },
       unknown: {
         ko: "그 동네는 우리 손님 로그가 얇아서, 아는 척은 안 할게. 가까운 쪽으로 다시 물어줘.",
@@ -244,8 +244,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: false,
     lines: {
       greeting: {
-        ko: "마야야. 나는 돼지를 안 먹어. 같은 제약이 있으면 내가 가본 집만 말해줄게.",
-        en: "I'm Maya. I don't eat pork. If that's your constraint too, I'll only send you places I've judged.",
+        ko: "안녕, 마야야 :) 돼지고기 없이도 맛있는 거 많아. 우리 뭐 먹을까?",
+        en: "Hey, I’m Maya :) So much good food without pork. What are you craving?",
       },
       unknown: {
         ko: "거긴 내가 돼지 없는 집으로 판정한 적이 없어. 아는 척은 안 할게. 이태원·성동 쪽으로 좁혀줘.",
@@ -352,8 +352,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: true,
     lines: {
       greeting: {
-        ko: "유키야. 점심이면 한 집만. 관광 골목은 빼고 물을게.",
-        en: "Yuki. One lunch. I'll skip the tourist alleys unless you insist.",
+        ko: "유키야! 오늘 점심 고민 중이야? 가까운 데서 맛있는 거 찾자.",
+        en: "I’m Yuki! Thinking about lunch? Let’s find something good nearby.",
       },
       unknown: {
         ko: "거긴 내가 점심으로 판정한 집이 없어. 을지로·성동으로 좁혀줘.",

@@ -169,7 +169,7 @@ export type LlmConfig = {
   source: KeyStatus["source"];
 };
 
-export function getLlmConfig(): LlmConfig | null {
+function storedLlmConfig(): LlmConfig | null {
   if (BOOT_LLM) {
     const provider = inferProvider(BOOT_LLM, BOOT_LLM_BASE);
     return {
@@ -204,6 +204,16 @@ export function getLlmConfig(): LlmConfig | null {
   };
 }
 
+// A configured non-Qwen model must never be sent a guest conversation.
+function isQwenModel(model: string) {
+  return /^(?:qwen\/)?qwen(?:[-\d]|$)/i.test(model);
+}
+
+export function getLlmConfig(): LlmConfig | null {
+  const config = storedLlmConfig();
+  return config && isQwenModel(config.model) ? config : null;
+}
+
 export function llmKeyStatus(): LlmStatus {
   const cfg = getLlmConfig();
   if (!cfg) {
@@ -227,6 +237,9 @@ export function setLlmApiKey(raw: string, opts?: { baseUrl?: string; model?: str
   const key = normalizeKey(raw);
   if (key.length < 16) {
     return { error: "키가 너무 짧다. DashScope/OpenRouter/Qwen 키를 그대로 넣는다." };
+  }
+  if (opts?.model && !isQwenModel(opts.model)) {
+    return { error: "Qwen 모델만 사용할 수 있습니다." };
   }
   const provider = inferProvider(key, opts?.baseUrl ?? "");
   const stored: Stored = {

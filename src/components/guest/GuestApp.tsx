@@ -10,7 +10,8 @@ import {
   Check,
   ChevronRight,
   Compass,
-  Footprints,
+  Search,
+  Sparkles,
   MapPin,
   MessageCircle,
   Plus,
@@ -20,7 +21,6 @@ import {
 } from "lucide-react";
 import {
   CHARACTERS,
-  HOSTEL,
   PLACES,
   characterById,
   communityCharacters,
@@ -29,7 +29,6 @@ import {
 } from "@/lib/catalog";
 import { greeting, mergePlaces, withDistance } from "@/lib/engine";
 import { readOverlay, writeOverlay } from "@/lib/overlay";
-import { PaneShell } from "@/components/panes/PaneShell";
 import { readSession } from "@/lib/session";
 import { CharacterAvatar } from "./CharacterAvatar";
 import type {
@@ -124,7 +123,10 @@ export function GuestApp() {
   const [error, setError] = useState("");
   const [retry, setRetry] = useState<{ text: string; placeId?: string }>();
   const [deepenOpen, setDeepenOpen] = useState(false);
-  const [mapRatio, setMapRatio] = useState(0.32);
+  const [homeTab, setHomeTab] = useState<"discover" | "chats">("discover");
+  const [filter, setFilter] = useState<"all" | "food" | "walk">("all");
+  const [search, setSearch] = useState("");
+  const mapDialog = useRef<HTMLDialogElement>(null);
   const [llmOn, setLlmOn] = useState(false);
   const [feedbackPending, setFeedbackPending] = useState(false);
   const [guestId, setGuestId] = useState("visitor");
@@ -181,7 +183,7 @@ export function GuestApp() {
       const savedPlaces = t.places;
       setPlaces((prev) => mergePlaces(prev, savedPlaces));
     }
-    setDeepenOpen(window.matchMedia("(min-width: 1024px)").matches);
+    setDeepenOpen(false);
     setView("chat");
   }
 
@@ -254,6 +256,12 @@ export function GuestApp() {
       behavior: "smooth",
     });
   }, [messages, pending, decision]);
+
+  useEffect(() => {
+    const dialog = mapDialog.current;
+    if (deepenOpen && view === "chat") dialog?.showModal();
+    else dialog?.close();
+  }, [deepenOpen, view]);
 
   async function send(text: string, selectedPlaceId?: string) {
     const trimmed = text.trim();
@@ -389,161 +397,187 @@ export function GuestApp() {
           : ko
             ? "키 없이 체험"
             : "Demo mode";
-  const header = (
-    <header className="city-header">
-      <Link href="/" className="city-brand">
-        <span className="brand-mark">
-          <Compass size={19} />
-        </span>
-        native city<span className="brand-period">.</span>
-      </Link>
-      <span className="city-location">
-        <span /> SEOUL, SEONGDONG
-      </span>
-      <div className="header-tools">
-        <span className="mode-badge">{mode}</span>
-        <button
-          onClick={() => setLang(ko ? "en" : "ko")}
-          aria-label={ko ? "Switch to English" : "한국어로 변경"}
-          className="language-button"
-        >
-          {ko ? "EN" : "한국어"}
-        </button>
-        <Link href="/studio" className="studio-link">
-          Studio <ArrowUpRight size={13} />
-        </Link>
-      </div>
-    </header>
-  );
+  const myThreads = threads.filter((t) => t.guestId === guestId);
+  const visibleCharacters = [
+    ...communityCharacters(roster),
+    ...houseCharacters(roster),
+  ].filter((c) => {
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "walk" ? ["dal", "nuri"].includes(c.id) : c.id !== "dal");
+    return (
+      matchesFilter &&
+      `${c.name.ko} ${c.name.en} ${tasteLabel(c, lang)} ${c.short[lang]}`
+        .toLowerCase()
+        .includes(search.toLowerCase().trim())
+    );
+  });
+  const quotes: Record<string, [string, string]> = {
+    maya: ["우리, 맛있는 거 먹으러 갈래?", "Let’s find something delicious."],
+    tom: ["지갑은 가볍게, 저녁은 제대로.", "Big dinner. Little budget."],
+    yuki: ["오늘 점심은 내가 골라줄게.", "I’ve got your lunch plans."],
+    nuri: [
+      "이 동네 궁금한 거? 나한테 물어봐.",
+      "Ask me about the neighborhood.",
+    ],
+    sori: ["별점 말고, 내 취향 믿어볼래?", "Trust my taste over the ratings?"],
+    dal: ["조금만 더 같이 걸을까?", "Walk with me a little longer?"],
+  };
 
   if (view === "home")
     return (
-      <div className="city-home">
-        {header}
+      <div className="city-home" lang={lang}>
+        <header className="city-header">
+          <Link href="/guest" className="city-brand" aria-label="Native City">
+            <span className="brand-mark">
+              <Sparkles size={22} />
+            </span>
+            native<span>city</span>
+            <span className="brand-period">.</span>
+          </Link>
+          <div className="header-tools">
+            <button
+              onClick={() => setLang(ko ? "en" : "ko")}
+              aria-label={ko ? "Switch to English" : "한국어로 변경"}
+              className="language-button"
+            >
+              {ko ? "EN" : "한국어"}
+            </button>
+            <Link href="/studio" className="studio-link">
+              {ko ? "호스트" : "Host"}
+              <ArrowUpRight size={14} />
+            </Link>
+          </div>
+        </header>
         <main className="city-discover">
-          <section className="discovery-intro">
+          <div className="discover-heading">
             <div>
-              <p className="eyebrow">
-                <span className="tiny-star">✳</span> A CITY, THROUGH SOMEONE’S
-                EYES
-              </p>
+              <p className="eyebrow">YOUR SEOUL, YOUR PEOPLE</p>
               <h1>
-                {ko ? (
-                  <>
-                    서울, 누구의 취향으로
-                    <br />
-                    <span>걸어볼까?</span>
-                  </>
-                ) : (
-                  <>
-                    Same city.
-                    <br />
-                    <span>A different point of view.</span>
-                  </>
-                )}
+                {homeTab === "chats"
+                  ? ko
+                    ? "우리의 대화"
+                    : "Your conversations"
+                  : ko
+                    ? "오늘, 누구랑 놀까?"
+                    : "Who’s your Seoul friend?"}
               </h1>
-              <p className="intro-copy">
-                {ko
-                  ? "맛집 목록보다, 취향이 맞는 친구 한 명. 캐릭터를 고르고 오늘의 서울을 함께 찾아봐요."
-                  : "Find a point of view you click with. Pick an AI character and discover their version of Seoul."}
-              </p>
-              <div className="intro-steps">
-                <span>01 {ko ? "캐릭터 고르기" : "Pick a character"}</span>
-                <ChevronRight size={12} />
-                <span>02 {ko ? "답변 누르기" : "Choose a reply"}</span>
-                <ChevronRight size={12} />
-                <span>03 {ko ? "지도에서 만나기" : "See the map"}</span>
+            </div>
+            <span className="seoul-pill">
+              <MapPin size={13} /> Seoul
+            </span>
+          </div>
+          {homeTab === "discover" ? (
+            <>
+              <div className="character-search" role="search">
+                <Search size={19} />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={
+                    ko ? "어떤 친구를 찾고 있어?" : "Find your kind of friend"
+                  }
+                  aria-label={ko ? "캐릭터 검색" : "Search characters"}
+                />
+                {search ? (
+                  <button
+                    onClick={() => setSearch("")}
+                    aria-label={ko ? "검색 지우기" : "Clear search"}
+                  >
+                    <X size={16} />
+                  </button>
+                ) : (
+                  <span>AI FRIENDS</span>
+                )}
               </div>
-            </div>
-            <div className="city-postcard" aria-hidden="true">
-              <span className="postcard-label">SEOUL FIELD NOTES · 01</span>
-              <svg viewBox="0 0 320 170" fill="none">
-                <path
-                  d="M-20 130Q70 65 145 115t200-20"
-                  stroke="#c4d8d0"
-                  strokeWidth="23"
-                />
-                <path
-                  d="m20 25 250 140M80-10l-20 190M190-10l-5 190M0 70l320-30"
-                  stroke="#e1d9c8"
-                  strokeWidth="10"
-                />
-                <path
-                  d="M53 98c15-40 84-76 137-44s47 82 77 72"
-                  stroke="#b65d3f"
-                  strokeWidth="2"
-                  strokeDasharray="4 5"
-                />
-                <circle cx="53" cy="98" r="7" fill="#b65d3f" />
-                <circle cx="189" cy="54" r="7" fill="#45685e" />
-                <circle cx="267" cy="126" r="7" fill="#cc9a47" />
-              </svg>
-              <span className="postcard-note">
-                {ko
-                  ? "같은 도시, 서로 다른 발견."
-                  : "Little detours. Better stories."}
-                <Footprints size={17} />
-              </span>
-            </div>
-          </section>
-          <section aria-labelledby="characters-title">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">MEET YOUR CITY PEOPLE</p>
-                <h2 id="characters-title">
-                  {ko ? "오늘은 누구랑 갈까요?" : "Who’s your kind of guide?"}
-                </h2>
+              <div
+                className="discovery-filters"
+                aria-label={ko ? "취향 필터" : "Taste filters"}
+              >
+                {(["all", "food", "walk"] as const).map((value, i) => (
+                  <button
+                    key={value}
+                    aria-pressed={filter === value}
+                    onClick={() => setFilter(value)}
+                  >
+                    {
+                      (ko
+                        ? ["전체", "맛집 메이트", "산책 메이트"]
+                        : ["Everyone", "Food friends", "Walking friends"])[i]
+                    }
+                  </button>
+                ))}
               </div>
-              <span className="quiet-label">
-                {ko
-                  ? "사람이 가르친 취향 · AI 캐릭터"
-                  : "Human-shaped taste · AI characters"}
-              </span>
-            </div>
-            <div className="character-grid">
-              {[...communityCharacters(roster), ...houseCharacters(roster)].map(
-                (c) => (
+              <section
+                className="character-grid"
+                aria-label={ko ? "대화할 캐릭터" : "Choose a character"}
+              >
+                {visibleCharacters.map((c) => (
                   <button
                     key={c.id}
                     className="character-card"
                     onClick={() => startChat(c.id)}
+                    aria-label={
+                      ko ? `${c.name.ko} 대화 시작` : `Chat with ${c.name.en}`
+                    }
                   >
-                    <div className="character-card-top">
-                      <CharacterAvatar character={c} size={76} />
+                    <div className="character-cover">
+                      <CharacterAvatar character={c} portrait />
                       <span className="character-tag">
-                        {c.origin === "community" ? "COMMUNITY" : "HOUSE"}
+                        {c.id === "maya"
+                          ? ko
+                            ? "오늘의 친구"
+                            : "TODAY’S PICK"
+                          : ko
+                            ? "AI 친구"
+                            : "AI FRIEND"}
+                      </span>
+                      <span className="card-chat-icon">
+                        <MessageCircle size={20} />
+                      </span>
+                      <span className="cover-name">
+                        {c.name[lang]}
+                        <span>{c.name.en.toUpperCase()}</span>
                       </span>
                     </div>
-                    <h3>
-                      {c.name[lang]}
-                      <ArrowUpRight size={19} />
-                    </h3>
-                    <p className="character-taste">{tasteLabel(c, lang)}</p>
-                    <p className="character-description">{c.short[lang]}</p>
-                    <div className="character-byline">
-                      <span
-                        className="byline-dot"
-                        style={{ background: c.color }}
-                      />
-                      {ko ? "취향을 가르친 사람" : "Taste by"}
-                      <strong>{c.trainedBy[lang]}</strong>
+                    <div className="character-card-copy">
+                      <h2>{quotes[c.id]?.[ko ? 0 : 1] ?? c.short[lang]}</h2>
+                      <p>
+                        {tasteLabel(c, lang)}
+                        <ChevronRight size={15} />
+                      </p>
                     </div>
                   </button>
-                ),
-              )}
-            </div>
-          </section>
-          {threads.some((t) => t.guestId === guestId) ? (
-            <section className="recent-section">
-              <div className="section-heading">
-                <h2>{ko ? "이어지는 이야기" : "Pick up where you left off"}</h2>
-                <MessageCircle size={18} />
-              </div>
-              <div className="recent-grid">
-                {threads
-                  .filter((t) => t.guestId === guestId)
-                  .slice(0, 3)
-                  .map((t) => {
+                ))}
+              </section>
+              {!visibleCharacters.length ? (
+                <div className="empty-chats">
+                  <Search size={28} />
+                  <h2>{ko ? "아직 그런 친구는 없어요" : "No friends found"}</h2>
+                  <button
+                    onClick={() => {
+                      setSearch("");
+                      setFilter("all");
+                    }}
+                  >
+                    {ko ? "모든 친구 보기" : "See everyone"}
+                  </button>
+                </div>
+              ) : null}
+              <p className="discovery-note">
+                {ko
+                  ? "취향이 맞는 AI 친구와 나만의 서울 찾기"
+                  : "A little conversation. A different side of Seoul."}
+              </p>
+            </>
+          ) : (
+            <section
+              className="recent-section"
+              aria-label={ko ? "최근 대화" : "Recent conversations"}
+            >
+              {myThreads.length ? (
+                <div className="recent-grid">
+                  {myThreads.map((t) => {
                     const c = characterById(t.characterId, roster);
                     return (
                       <button
@@ -551,32 +585,64 @@ export function GuestApp() {
                         key={t.id}
                         onClick={() => openThread(t)}
                       >
-                        <CharacterAvatar character={c} size={42} />
+                        <CharacterAvatar character={c} size={62} />
                         <span>
-                          <strong>{c.name[lang]}</strong>
+                          <strong>
+                            {c.name[lang]}
+                            <small>
+                              {new Date(t.updatedAt).toLocaleDateString(
+                                ko ? "ko-KR" : "en-US",
+                                { month: "short", day: "numeric" },
+                              )}
+                            </small>
+                          </strong>
                           <small>{t.messages.at(-1)?.text}</small>
                         </span>
-                        <ChevronRight size={16} />
+                        <ChevronRight size={17} />
                       </button>
                     );
                   })}
-              </div>
+                </div>
+              ) : (
+                <div className="empty-chats">
+                  <MessageCircle size={36} />
+                  <h2>{ko ? "첫 인사를 건네볼까?" : "Start with a hello"}</h2>
+                  <p>
+                    {ko
+                      ? "마음에 드는 친구를 만나봐."
+                      : "Your new Seoul friend is one tap away."}
+                  </p>
+                  <button onClick={() => setHomeTab("discover")}>
+                    {ko ? "친구 만나기" : "Meet the friends"}
+                    <ArrowUpRight size={16} />
+                  </button>
+                </div>
+              )}
             </section>
-          ) : null}
-          <footer className="discovery-footer">
-            <span>
-              ✳{" "}
-              {ko
-                ? "추천마다 취향의 주인을 남깁니다."
-                : "Every recommendation has a point of view."}
-            </span>
-            <span>
-              {ko
-                ? "서울 데모 · 장소 정보는 방문 전 확인"
-                : "Seoul demo · Confirm details before visiting"}
-            </span>
-          </footer>
+          )}
         </main>
+        <nav
+          className="guest-tabbar"
+          aria-label={ko ? "게스트 메뉴" : "Guest navigation"}
+        >
+          <button
+            aria-current={homeTab === "discover" ? "page" : undefined}
+            onClick={() => setHomeTab("discover")}
+          >
+            <Compass size={23} />
+            <span>{ko ? "발견" : "Discover"}</span>
+          </button>
+          <button
+            aria-current={homeTab === "chats" ? "page" : undefined}
+            onClick={() => setHomeTab("chats")}
+          >
+            <span className="tab-icon">
+              <MessageCircle size={23} />
+              {myThreads.length ? <i /> : null}
+            </span>
+            <span>{ko ? "대화" : "Chats"}</span>
+          </button>
+        </nav>
       </div>
     );
 
@@ -671,274 +737,309 @@ export function GuestApp() {
         </p>
         <p>{character.coverage[lang]}</p>
       </section>
-      <section className="commerce-placeholder">
-        <span>COMING LATER</span>
-        <h3>{ko ? "발견 다음엔, 경험." : "From a place to an experience."}</h3>
-        <p>
-          {ko
-            ? "캐릭터의 취향으로 만나는 로컬 액티비티. 예약 연결은 준비 중이에요."
-            : "Local activities through their taste. Booking connections are coming later."}
-        </p>
-      </section>
     </div>
   );
 
   return (
-    <div className="city-chat">
-      <PaneShell
-        header={header}
-        deepenOpen={deepenOpen}
-        onDeepenToggle={() => setDeepenOpen((v) => !v)}
-        deepenLabel={ko ? "추천 이유 · 장소 정보" : "Taste & place details"}
-        evidenceRatio={mapRatio}
-        onEvidenceRatio={setMapRatio}
-        deepen={detail}
-        action={
-          <div className="conversation">
-            <div className="conversation-heading">
-              <button
-                className="icon-button"
-                aria-label={ko ? "캐릭터 목록" : "All characters"}
-                onClick={() => {
-                  requestRef.current?.abort();
-                  requestRef.current = null;
-                  busyRef.current = false;
-                  setPending(false);
-                  setView("home");
-                }}
-              >
-                <ArrowLeft size={19} />
-              </button>
-              <CharacterAvatar character={character} size={40} />
-              <div>
-                <h1>
-                  {character.name[lang]}
-                  <span>AI</span>
-                </h1>
-                <p>
-                  {character.trainedBy[lang]}
-                  {ko ? "의 취향으로 추천" : "’s point of view"}
-                </p>
-              </div>
-              <button
-                className="new-chat-button"
-                disabled={pending}
-                onClick={() => startChat(character.id)}
-              >
-                <Plus size={15} />
-                <span>{ko ? "새 대화" : "New chat"}</span>
-              </button>
-            </div>
-            <div
-              ref={listRef}
-              className="message-list"
-              role="log"
-              aria-label={ko ? "캐릭터와 대화" : "Character conversation"}
-              aria-live="polite"
-              aria-busy={pending}
-            >
-              <div className="conversation-date">
-                {ko
-                  ? "우리만의 서울을 찾는 중"
-                  : "FINDING YOUR VERSION OF SEOUL"}
-              </div>
-              {messages.map((m) => (
-                <div
-                  className={`message-row ${m.role === "guest" ? "is-guest" : "is-character"}`}
-                  key={m.id}
-                >
-                  {m.role === "character" ? (
-                    <CharacterAvatar character={character} size={30} />
-                  ) : null}
-                  <div className="message-content">
-                    {m.role === "character" ? (
-                      <span className="message-author">
-                        {m.attribution?.characterName ?? character.name[lang]}
-                        <small>
-                          {m.voice === "qwen"
-                            ? "Qwen"
-                            : m.voice === "engine"
-                              ? ko
-                                ? "규칙 답변"
-                                : "Rule reply"
-                              : "AI"}
-                        </small>
-                      </span>
-                    ) : null}
-                    <div className="message-bubble">{m.text}</div>
-                    {m.attribution && m.placeIds?.length ? (
-                      <div className="message-attribution">
-                        ↳ {m.attribution.trainedBy}
-                        {ko
-                          ? "의 기준으로 고른 추천"
-                          : "’s taste behind this pick"}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-              {pending ? (
-                <div className="typing-indicator" role="status">
-                  <span />
-                  <span />
-                  <span />
-                  <small>
-                    {character.name[lang]}
-                    {ko ? "가 고르고 있어요" : " is thinking"}
-                  </small>
-                </div>
-              ) : null}
-              {!pending && decision ? (
-                <div className="reply-options">
-                  <p className="eyebrow">
-                    {ko
-                      ? "마음이 가는 곳을 골라요"
-                      : "WHICH ONE FEELS LIKE YOU?"}
-                  </p>
-                  {decision.options.map((option, i) => {
-                    const p = placeById(option.placeId, places);
-                    return p ? (
-                      <button
-                        key={p.id}
-                        className="place-option"
-                        onClick={() => pickOption(option)}
-                      >
-                        <span className="option-number">0{i + 1}</span>
-                        <span>
-                          <strong>{p.title[lang]}</strong>
-                          <small>{option.why[lang]}</small>
-                        </span>
-                        <ArrowUpRight size={16} />
-                      </button>
-                    ) : null;
-                  })}
-                </div>
-              ) : null}
-              {!pending && lastReply ? (
-                <div className="feedback-bar">
-                  <span>
-                    {ko
-                      ? "이 추천, 나와 맞나요?"
-                      : "Your kind of recommendation?"}
-                  </span>
-                  <button
-                    disabled={feedbackPending}
-                    aria-pressed={
-                      thread?.feedback?.messageId === lastReply.id &&
-                      thread.feedback.value === "helpful"
-                    }
-                    onClick={() => feedback("helpful")}
-                  >
-                    <ThumbsUp size={13} />
-                    {ko ? "좋아요" : "Helpful"}
-                  </button>
-                  <button
-                    disabled={feedbackPending}
-                    aria-pressed={
-                      thread?.feedback?.messageId === lastReply.id &&
-                      thread.feedback.value === "not-for-me"
-                    }
-                    onClick={() => feedback("not-for-me")}
-                  >
-                    <ThumbsDown size={13} />
-                    {ko ? "내 취향은 아냐" : "Not for me"}
-                  </button>
-                  {thread?.feedback?.messageId === lastReply.id ? (
-                    <small>
-                      <Check size={12} />
-                      {ko ? "트레이너 검토용 저장" : "Saved for trainer review"}
-                    </small>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            <div className="reply-dock">
-              <div className="quick-replies">
-                {promptsFor(character, lang).map((prompt) => (
-                  <button
-                    key={prompt}
-                    disabled={pending}
-                    onClick={() => send(prompt)}
-                  >
-                    {prompt}
-                    <ChevronRight size={13} />
-                  </button>
-                ))}
-              </div>
-              {error ? (
-                <div className="chat-error" role="alert">
-                  {error}
-                  {retry ? (
-                    <button
-                      onClick={() => send(retry.text, retry.placeId)}
-                      disabled={pending}
-                    >
-                      {ko ? "다시 시도" : "Retry"}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-              <form
-                className="composer"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void send(draft);
-                }}
-              >
-                <input
-                  aria-label={ko ? "직접 답변 입력" : "Write your reply"}
-                  value={draft}
-                  maxLength={2000}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={
-                    ko
-                      ? "옵션을 고르거나, 하고 싶은 말을 적어요"
-                      : "Choose a reply, or say it your way"
-                  }
-                />
-                <button
-                  type="submit"
-                  aria-label={ko ? "보내기" : "Send message"}
-                  disabled={pending || !draft.trim()}
-                >
-                  <ArrowUp size={19} />
-                </button>
-              </form>
-              <p className="composer-note">
-                {ko
-                  ? "AI 캐릭터 · 데모 추천이며 영업·식재료는 방문 전 확인해 주세요."
-                  : "AI character · Demo recommendations. Confirm hours and ingredients before visiting."}
-              </p>
-            </div>
+    <div className="city-chat" lang={lang}>
+      <aside className="chat-companion">
+        <Link href="/guest" className="city-brand">
+          <Sparkles size={22} /> native city.
+        </Link>
+        <div className="companion-portrait">
+          <CharacterAvatar character={character} portrait />
+        </div>
+        <h2>
+          {character.name[lang]} <span>AI</span>
+        </h2>
+        <p>{tasteLabel(character, lang)}</p>
+        <blockquote>
+          “{quotes[character.id]?.[ko ? 0 : 1] ?? character.short[lang]}”
+        </blockquote>
+        <button className="companion-map" onClick={() => setDeepenOpen(true)}>
+          <MapPin size={18} />
+          {ko ? "우리의 지도" : "Our map"}
+          <ArrowUpRight size={16} />
+        </button>
+      </aside>
+      <div className="conversation">
+        <div className="conversation-heading">
+          <button
+            className="icon-button"
+            aria-label={ko ? "캐릭터 목록" : "All characters"}
+            onClick={() => {
+              requestRef.current?.abort();
+              requestRef.current = null;
+              busyRef.current = false;
+              setPending(false);
+              setView("home");
+            }}
+          >
+            <ArrowLeft size={19} />
+          </button>
+          <CharacterAvatar character={character} size={40} />
+          <div>
+            <h1>
+              {character.name[lang]}
+              <span>AI</span>
+            </h1>
+            <p>{ko ? "너의 서울 메이트" : "Your Seoul friend"}</p>
           </div>
-        }
-        evidence={
-          <>
-            <MapCanvas
-              lang={lang}
-              places={mapPlaces}
-              selectedId={selectedId}
-              onSelect={(id) => {
-                setSelectedId(id);
-                setDeepenOpen(true);
-              }}
-            />
-            <div className="map-caption">
-              <MapPin size={14} />
-              <strong>
-                {ko
-                  ? "대화가 지도가 되는 순간"
-                  : "Your conversation, on the map"}
-              </strong>
+          <button
+            className="new-chat-button"
+            aria-label={ko ? "새 대화" : "New chat"}
+            disabled={pending}
+            onClick={() => startChat(character.id)}
+          >
+            <Plus size={20} />
+            <span>{ko ? "새 대화" : "New chat"}</span>
+          </button>
+          <button
+            className="chat-map-button"
+            onClick={() => setDeepenOpen(true)}
+            aria-label={ko ? "추천 지도 열기" : "Open recommendation map"}
+          >
+            <MapPin size={19} />
+            <span>{ko ? "지도" : "Map"}</span>
+            {focusIds.length > 0 ? <i>{focusIds.length}</i> : null}
+          </button>
+          <button
+            className="language-button"
+            onClick={() => setLang(ko ? "en" : "ko")}
+            aria-label={ko ? "Switch to English" : "한국어로 변경"}
+          >
+            {ko ? "EN" : "한국어"}
+          </button>
+        </div>
+        <div
+          ref={listRef}
+          className="message-list"
+          role="log"
+          aria-label={ko ? "캐릭터와 대화" : "Character conversation"}
+          aria-live="polite"
+          aria-busy={pending}
+        >
+          <div className="chat-welcome">
+            <CharacterAvatar character={character} size={88} />
+            <h2>
+              {character.name[lang]}
+              <span>AI</span>
+            </h2>
+            <p>{tasteLabel(character, lang)}</p>
+          </div>
+          <div className="conversation-date">
+            {ko ? "여기서부터, 우리의 서울" : "Our little corner of Seoul"}
+          </div>
+          {messages.map((m) => (
+            <div
+              className={`message-row ${m.role === "guest" ? "is-guest" : "is-character"}`}
+              key={m.id}
+            >
+              {m.role === "character" ? (
+                <CharacterAvatar character={character} size={30} />
+              ) : null}
+              <div className="message-content">
+                {m.role === "character" ? (
+                  <span className="message-author">
+                    {m.attribution?.characterName ?? character.name[lang]}
+                    <small>
+                      {m.voice === "qwen"
+                        ? "Qwen"
+                        : m.voice === "engine"
+                          ? ko
+                            ? "규칙 답변"
+                            : "Rule reply"
+                          : "AI"}
+                    </small>
+                  </span>
+                ) : null}
+                <div className="message-bubble">{m.text}</div>
+              </div>
+            </div>
+          ))}
+          {pending ? (
+            <div className="typing-indicator" role="status">
+              <span />
+              <span />
+              <span />
+              <small>
+                {character.name[lang]}
+                {ko ? "가 고르고 있어요" : " is thinking"}
+              </small>
+            </div>
+          ) : null}
+          {!pending && decision ? (
+            <div className="reply-options">
+              <p className="eyebrow">
+                {ko ? "마음이 가는 곳을 골라요" : "WHICH ONE FEELS LIKE YOU?"}
+              </p>
+              {decision.options.map((option, i) => {
+                const p = placeById(option.placeId, places);
+                return p ? (
+                  <button
+                    key={p.id}
+                    className="place-option"
+                    onClick={() => pickOption(option)}
+                  >
+                    <span className="option-number">0{i + 1}</span>
+                    <span>
+                      <strong>{p.title[lang]}</strong>
+                      <small>{option.why[lang]}</small>
+                    </span>
+                    <ArrowUpRight size={16} />
+                  </button>
+                ) : null;
+              })}
+            </div>
+          ) : null}
+          {!pending && lastReply ? (
+            <div className="feedback-bar">
               <span>
-                {focusIds.length
-                  ? `${mapPlaces.length} ${ko ? "곳의 추천" : "picks"}`
-                  : HOSTEL.neighborhood[lang]}
+                {ko ? "이 추천, 나와 맞나요?" : "Your kind of recommendation?"}
+              </span>
+              <button
+                disabled={feedbackPending}
+                aria-pressed={
+                  thread?.feedback?.messageId === lastReply.id &&
+                  thread.feedback.value === "helpful"
+                }
+                onClick={() => feedback("helpful")}
+              >
+                <ThumbsUp size={13} />
+                {ko ? "좋아요" : "Helpful"}
+              </button>
+              <button
+                disabled={feedbackPending}
+                aria-pressed={
+                  thread?.feedback?.messageId === lastReply.id &&
+                  thread.feedback.value === "not-for-me"
+                }
+                onClick={() => feedback("not-for-me")}
+              >
+                <ThumbsDown size={13} />
+                {ko ? "내 취향은 아냐" : "Not for me"}
+              </button>
+              {thread?.feedback?.messageId === lastReply.id ? (
+                <small>
+                  <Check size={12} />
+                  {ko ? "피드백 저장했어" : "Feedback saved"}
+                </small>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="reply-dock">
+          <div className="quick-replies">
+            {promptsFor(character, lang).map((prompt) => (
+              <button
+                key={prompt}
+                disabled={pending}
+                onClick={() => send(prompt)}
+              >
+                {prompt}
+                <ChevronRight size={13} />
+              </button>
+            ))}
+          </div>
+          {error ? (
+            <div className="chat-error" role="alert">
+              {error}
+              {retry ? (
+                <button
+                  onClick={() => send(retry.text, retry.placeId)}
+                  disabled={pending}
+                >
+                  {ko ? "다시 시도" : "Retry"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          <form
+            className="composer"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void send(draft);
+            }}
+          >
+            <input
+              aria-label={ko ? "직접 답변 입력" : "Write your reply"}
+              value={draft}
+              maxLength={2000}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={
+                ko
+                  ? `${character.name.ko}에게 메시지 보내기`
+                  : `Message ${character.name.en}`
+              }
+            />
+            <button
+              type="submit"
+              aria-label={ko ? "보내기" : "Send message"}
+              disabled={pending || !draft.trim()}
+            >
+              <ArrowUp size={19} />
+            </button>
+          </form>
+          <p className="composer-note" title={mode}>
+            {ko
+              ? "AI 친구의 추천 · 영업·식재료는 방문 전 확인해 줘"
+              : "AI recommendations · Check hours & ingredients before visiting"}
+          </p>
+        </div>
+      </div>
+      <dialog
+        ref={mapDialog}
+        className="guest-map-dialog"
+        onCancel={() => setDeepenOpen(false)}
+        onClose={() => setDeepenOpen(false)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) setDeepenOpen(false);
+        }}
+        aria-label={ko ? "우리의 지도" : "Our map"}
+      >
+        <div className="map-sheet">
+          <header>
+            <div>
+              <MapPin size={20} />
+              <h2>{ko ? "우리의 지도" : "Our map"}</h2>
+              <span>
+                {mapPlaces.length} {ko ? "곳" : "places"}
               </span>
             </div>
-          </>
-        }
-      />
+            <button
+              autoFocus
+              className="icon-button"
+              onClick={() => setDeepenOpen(false)}
+              aria-label={ko ? "지도 닫기" : "Close map"}
+            >
+              <X size={22} />
+            </button>
+          </header>
+          <div className="guest-map-canvas">
+            {deepenOpen ? (
+              <MapCanvas
+                lang={lang}
+                places={mapPlaces}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
+            ) : null}
+          </div>
+          <div className="map-place-chips">
+            {mapPlaces.map((p) => (
+              <button
+                key={p.id}
+                aria-pressed={selectedId === p.id}
+                onClick={() => setSelectedId(p.id)}
+              >
+                <MapPin size={13} />
+                {p.title[lang]}
+              </button>
+            ))}
+          </div>
+          {detail}
+        </div>
+      </dialog>
     </div>
   );
 }

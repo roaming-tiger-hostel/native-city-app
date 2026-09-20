@@ -276,17 +276,17 @@ function composeSpeech(
 
   const pork = Boolean(character.porkFree || guest.porkFree);
   const ko = [
-    pork ? "돼지 안 먹는 기준으로 골랐어." : `${character.trainedBy.ko}가 가르친 기준이야.`,
-    `${top.title.ko} — ${top.why.ko}`,
-    second ? `차선은 ${second.title.ko}.` : null,
+    pork ? "돼지고기 없는 메뉴로 찾아봤어 :)" : "여기 어때? 네가 좋아할 것 같아.",
+    `${top.title.ko} — ${top.note.ko}`,
+    second ? `${second.title.ko}도 괜찮아. 어디가 끌려?` : null,
     top.distMeters != null ? `호스텔에서 직선거리 약 ${(top.distMeters / 1000).toFixed(1)}km.` : null,
   ]
     .filter(Boolean)
     .join(" ");
   const en = [
-    pork ? "I picked from pork-free places." : `This is ${character.trainedBy.en}'s judgment.`,
-    `${top.title.en} — ${top.why.en}`,
-    second ? `Backup: ${second.title.en}.` : null,
+    pork ? "Found some options without pork :)" : "How about this? I think you’d like it.",
+    `${top.title.en} — ${top.note.en}`,
+    second ? `${second.title.en} is another option. Which sounds good?` : null,
     top.distMeters != null ? `About ${(top.distMeters / 1000).toFixed(1)} km from the hostel in a straight line.` : null,
   ]
     .filter(Boolean)

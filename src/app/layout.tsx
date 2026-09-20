@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Native City — 누구의 취향으로 만나는 서울",
+  title: "Native City — 오늘, 누구랑 놀까?",
   description:
-    "사람이 가르친 취향으로 추천하는 AI 캐릭터. 캐릭터 선택, 옵션 대화, 지도로 나만의 서울을 찾아보세요.",
+    "취향이 맞는 AI 친구와 나만의 서울 찾기. 친구를 고르고 바로 대화해 보세요.",
 };
 
 export const viewport: Viewport = {
