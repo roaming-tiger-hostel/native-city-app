@@ -3,722 +3,942 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CHARACTERS, HOSTEL, PLACES, characterById, communityCharacters, houseCharacters, placeById } from "@/lib/catalog";
-import { greeting, withDistance } from "@/lib/engine";
+import {
+  ArrowLeft,
+  ArrowUp,
+  ArrowUpRight,
+  Check,
+  ChevronRight,
+  Compass,
+  Footprints,
+  MapPin,
+  MessageCircle,
+  Plus,
+  ThumbsDown,
+  ThumbsUp,
+  X,
+} from "lucide-react";
+import {
+  CHARACTERS,
+  HOSTEL,
+  PLACES,
+  characterById,
+  communityCharacters,
+  houseCharacters,
+  placeById,
+} from "@/lib/catalog";
+import { greeting, mergePlaces, withDistance } from "@/lib/engine";
 import { readOverlay, writeOverlay } from "@/lib/overlay";
 import { PaneShell } from "@/components/panes/PaneShell";
 import { readSession } from "@/lib/session";
+import { CharacterAvatar } from "./CharacterAvatar";
 import type {
   Character,
-  CharacterId,
   ChatMessage,
   DecisionOption,
   EngineResult,
   Lang,
   Place,
-  SourceBadge,
   Thread,
   TourStatus,
 } from "@/lib/types";
 
-const MapCanvas = dynamic(() => import("../MapCanvas").then((m) => m.MapCanvas), { ssr: false });
+const MapCanvas = dynamic(
+  () => import("../MapCanvas").then((m) => m.MapCanvas),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="map-loading">지도를 불러오는 중 · Loading map…</div>
+    ),
+  },
+);
 
-function chipsFor(character: Character, lang: Lang): string[] {
-  if (character.porkFree || character.id === "maya") {
-    return lang === "ko"
-      ? ["밤 11시인데 돼지고기는 못 먹어. 어디 가지?", "호스텔 근처 할랄에 가까운 점심."]
-      : ["It's 11pm and I don't eat pork. Where should I eat?", "Halal-friendly lunch near the hostel?"];
-  }
-  if (character.id === "tom") {
-    return lang === "ko"
-      ? ["싸게, 걸어서 갈 수 있는 저녁.", "영어 되는 데서 맥주."]
-      : ["Cheap dinner I can walk to.", "Somewhere English-ok for a beer."];
-  }
-  if (character.id === "yuki") {
-    return lang === "ko"
-      ? ["첫 점심, 관광지 말고 가까운 데.", "실패 없는 냉면 한 그릇."]
-      : ["First lunch — not touristy, close if possible.", "One bowl that won't fail."];
-  }
-  if (character.id === "dal") {
-    return lang === "ko"
-      ? ["해지기 전에 걷고 싶어. 사진 골목은 싫어.", "오늘 밤은 어디까지 걸을까."]
-      : ["I want a walk before sunset, not a photo street.", "How far should I walk tonight?"];
-  }
-  if (character.id === "sori") {
-    return lang === "ko"
-      ? ["별점 말고 진짜 집. 배고파.", "을지로에서 저녁."]
-      : ["Hungry. Not a 4.5-star trap.", "Dinner in Euljiro."];
-  }
-  return lang === "ko"
-    ? ["여기 묵은 손님은 보통 어디 가?", "배고파. 가까운 데."]
-    : ["Where do people staying here actually go?", "Hungry. Somewhere close."];
+function promptsFor(c: Character, lang: Lang) {
+  const ko = lang === "ko";
+  if (c.porkFree)
+    return ko
+      ? ["돼지고기 없는 점심 먹고 싶어", "밤 11시, 돼지고기 없는 야식"]
+      : ["Lunch without pork", "It's 11pm. No-pork late dinner"];
+  if (c.id === "dal")
+    return ko
+      ? ["해 질 때 조용히 걷고 싶어", "비 오는 날 갈 곳은?"]
+      : ["A quiet sunset walk", "Somewhere for a rainy day"];
+  if (c.id === "tom")
+    return ko
+      ? ["가성비 좋은 저녁 먹자", "늦은 밤 먹을 곳은?"]
+      : ["A good-value dinner", "A late-night bite?"];
+  if (c.id === "yuki")
+    return ko
+      ? ["첫 점심, 가까운 곳으로", "관광지 말고 냉면 한 그릇"]
+      : [
+          "My first lunch, somewhere close",
+          "A bowl of noodles, away from crowds",
+        ];
+  if (c.id === "sori")
+    return ko
+      ? ["별점 말고 네 취향의 맛집", "을지로에서 저녁 먹자"]
+      : ["Your taste, not the ratings", "Dinner in Euljiro"];
+  return ko
+    ? ["호스텔 근처에서 밥 먹자", "조용한 산책 코스 추천해 줘"]
+    : ["Food near the hostel", "A quiet walk, please"];
 }
 
-function mergeThreads(a: Thread[] = [], b: Thread[] = []) {
+function mergeThreads(...lists: Thread[][]) {
   const byId = new Map<string, Thread>();
-  for (const t of a) byId.set(t.id, t);
-  for (const t of b) byId.set(t.id, t);
-  return [...byId.values()].sort((x, y) => y.updatedAt.localeCompare(x.updatedAt));
+  for (const t of lists.flat()) {
+    if (!byId.has(t.id) || t.updatedAt >= byId.get(t.id)!.updatedAt)
+      byId.set(t.id, t);
+  }
+  return [...byId.values()]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 40);
 }
 
-function previewOf(thread: Thread) {
-  const last = [...thread.messages].reverse().find((m) => m.role !== "system");
-  return last?.text ?? "";
+function tasteLabel(c: Character, lang: Lang) {
+  const labels: Record<string, [string, string]> = {
+    maya: ["돼지고기 없는 한 끼", "Food without pork"],
+    tom: ["가볍게 쓰고, 잘 먹기", "Good food, small budget"],
+    yuki: ["처음이어도 좋은 점심", "Your first Seoul lunch"],
+    nuri: ["호스텔의 동네 친구", "Your neighborhood friend"],
+    sori: ["별점보다 자기 기준", "Taste over ratings"],
+    dal: ["느리게 걷는 서울", "Seoul at a slower pace"],
+  };
+  return labels[c.id]?.[lang === "ko" ? 0 : 1] ?? c.coverage[lang];
 }
 
 export function GuestApp() {
-  const [lang, setLang] = useState<Lang>("en");
+  const [lang, setLang] = useState<Lang>("ko");
   const [view, setView] = useState<"home" | "chat">("home");
   const [roster, setRoster] = useState<Character[]>(CHARACTERS);
   const [threads, setThreads] = useState<Thread[]>([]);
-  const [threadId, setThreadId] = useState<string | undefined>();
-  const [characterId, setCharacterId] = useState<CharacterId>("maya");
+  const [threadId, setThreadId] = useState<string>();
+  const [characterId, setCharacterId] = useState("maya");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [places, setPlaces] = useState<Place[]>(PLACES);
   const [focusIds, setFocusIds] = useState<string[]>([]);
-  const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [selectedId, setSelectedId] = useState<string>();
   const [decision, setDecision] = useState<EngineResult["decision"]>();
-  const [sources, setSources] = useState<SourceBadge[]>([]);
   const [status, setStatus] = useState<TourStatus>();
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState<{ text: string; placeId?: string }>();
   const [deepenOpen, setDeepenOpen] = useState(false);
-  const [mapRatio, setMapRatio] = useState(0.4);
-  const [tourLog, setTourLog] = useState<{ path: string; ok: boolean; service: string }[]>([]);
-  const [voice, setVoice] = useState<"qwen" | "engine">("engine");
+  const [mapRatio, setMapRatio] = useState(0.32);
   const [llmOn, setLlmOn] = useState(false);
+  const [feedbackPending, setFeedbackPending] = useState(false);
+  const [guestId, setGuestId] = useState("visitor");
   const listRef = useRef<HTMLDivElement>(null);
-  const placesRef = useRef(places);
-
+  const requestRef = useRef<AbortController | null>(null);
+  const busyRef = useRef(false);
+  const threadsRef = useRef(threads);
+  const ko = lang === "ko";
   const character = characterById(characterId, roster);
   const selected = selectedId ? placeById(selectedId, places) : undefined;
-  const house = houseCharacters(roster);
-  const community = communityCharacters(roster);
-  const guestId = readSession()?.guestId ?? "visitor";
-  const inbox = threads.filter((t) => t.guestId === guestId);
-  const mapPlaces = useMemo(() => {
-    if (focusIds.length) {
-      return focusIds.map((id) => placeById(id, places)).filter((p): p is Place => Boolean(p));
-    }
-    return withDistance(places)
-      .sort((a, b) => (a.distMeters ?? 9e9) - (b.distMeters ?? 9e9))
-      .slice(0, 10);
-  }, [focusIds, places]);
+  const thread = threads.find((t) => t.id === threadId);
+  const lastReply = [...messages]
+    .reverse()
+    .find((m) => m.role === "character" && m.placeIds?.length);
+  const voice = [...messages].reverse().find((m) => m.voice)?.voice;
+  const mapPlaces = useMemo(
+    () =>
+      focusIds.length
+        ? focusIds
+            .map((id) => placeById(id, places))
+            .filter((p): p is Place => Boolean(p))
+        : withDistance(places)
+            .sort((a, b) => (a.distMeters ?? 0) - (b.distMeters ?? 0))
+            .slice(0, 6),
+    [focusIds, places],
+  );
 
-  function persistThreads(next: Thread[]) {
+  function persist(next: Thread[]) {
+    threadsRef.current = next;
     setThreads(next);
     writeOverlay({ threads: next });
   }
 
-  function openThread(thread: Thread) {
-    setThreadId(thread.id);
-    setCharacterId(thread.characterId);
-    setMessages(thread.messages.length ? thread.messages : [greeting(characterById(thread.characterId, roster), lang)]);
-    setFocusIds(thread.placeIds);
-    setSelectedId(thread.placeIds[0]);
-    setDecision(undefined);
-    setSources([]);
+  function openThread(t: Thread) {
+    requestRef.current?.abort();
+    requestRef.current = null;
+    busyRef.current = false;
+    setPending(false);
+    setError("");
+    setRetry(undefined);
+    setDraft("");
+    setThreadId(t.id);
+    setCharacterId(t.characterId);
+    setLang(t.lang);
+    setMessages(
+      t.messages.length
+        ? t.messages
+        : [greeting(characterById(t.characterId, roster), t.lang)],
+    );
+    setFocusIds(t.placeIds);
+    setSelectedId(t.placeIds[0]);
+    setDecision(t.decision);
+    if (t.places?.length) {
+      const savedPlaces = t.places;
+      setPlaces((prev) => mergePlaces(prev, savedPlaces));
+    }
+    setDeepenOpen(window.matchMedia("(min-width: 1024px)").matches);
     setView("chat");
   }
 
-  function startChat(id: CharacterId) {
-    const ch = characterById(id, roster);
-    const thread: Thread = {
+  function startChat(id: string) {
+    const t: Thread = {
       id: crypto.randomUUID(),
-      guestId: readSession()?.guestId ?? "visitor",
+      guestId,
       guestName: readSession()?.name ?? "Visitor",
       characterId: id,
       lang,
-      messages: [greeting(ch, lang)],
+      messages: [greeting(characterById(id, roster), lang)],
       placeIds: [],
       updatedAt: new Date().toISOString(),
     };
-    persistThreads(mergeThreads([thread], threads));
-    openThread(thread);
+    persist(mergeThreads(threadsRef.current, [t]));
+    openThread(t);
   }
 
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    if (mq.matches) setDeepenOpen(true);
-  }, []);
-
-  useEffect(() => {
+    const overlay = readOverlay();
+    // Browser storage is restored after the initial server/client render agrees.
+    let mounted = true;
+    queueMicrotask(() => {
+      if (!mounted) return;
+      setGuestId(readSession()?.guestId ?? "visitor");
+      if (overlay?.threads.length) persist(overlay.threads);
+      if (overlay?.extras.length) setRoster([...CHARACTERS, ...overlay.extras]);
+    });
     fetch("/api/secrets")
       .then((r) => r.json())
-      .then((data) => setLlmOn(Boolean(data.llm?.configured)))
+      .then((d) => setLlmOn(Boolean(d.llm?.configured)))
       .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    Promise.all([fetch("/api/runtime").then((r) => r.json()), fetch("/api/tour").then((r) => r.json())])
-      .then(async ([runtime, data]) => {
-        const overlay = readOverlay();
-        if (overlay && (overlay.extras.length || overlay.judgments.length || overlay.threads.length)) {
-          const hydrated = await fetch("/api/runtime", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ op: "overlay", ...overlay }),
-          }).then((r) => r.json());
-          if (Array.isArray(hydrated.characters) && hydrated.characters.length) {
-            setRoster(hydrated.characters);
-          }
-          if (Array.isArray(hydrated.threads)) {
-            persistThreads(mergeThreads(overlay.threads, hydrated.threads));
-          }
-        } else {
-          if (Array.isArray(runtime.characters) && runtime.characters.length) setRoster(runtime.characters);
-          if (Array.isArray(runtime.threads)) persistThreads(runtime.threads);
-        }
-        if (overlay?.extras?.length) {
-          setRoster((prev) => {
-            const byId = new Map(prev.map((c) => [c.id, c]));
-            for (const c of overlay.extras) byId.set(c.id, c);
-            return [...byId.values()];
-          });
-        }
-        if (Array.isArray(data.places)) setPlaces(data.places);
-        if (data.status) setStatus(data.status);
-        if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
-      })
-      .catch(() => undefined);
-    // persistThreads is local and overlay-backed
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    placesRef.current = places;
-  }, [places]);
-
-  useEffect(() => {
-    const place = selectedId ? placeById(selectedId, placesRef.current) : undefined;
-    if (!place?.contentId) return;
-    fetch(`/api/tour?contentId=${encodeURIComponent(place.contentId)}`)
+    fetch("/api/tour")
       .then((r) => r.json())
-      .then((data) => {
-        if (data.place?.overview) {
-          setPlaces((prev) =>
-            prev.map((p) =>
-              p.id === place.id
-                ? {
-                    ...p,
-                    overview: data.place.overview ?? p.overview,
-                    tel: data.place.tel || p.tel,
-                    sources: Array.from(new Set([...p.sources, "kto"])) as Place["sources"],
-                  }
-                : p,
-            ),
-          );
-        }
-        if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
-        if (data.status) setStatus(data.status);
+      .then((d) => {
+        if (Array.isArray(d.places)) setPlaces(d.places);
+        setStatus(d.status);
       })
       .catch(() => undefined);
-  }, [selectedId]);
+    (async () => {
+      try {
+        const response = await fetch(
+          "/api/runtime",
+          overlay
+            ? {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ op: "overlay", ...overlay }),
+              }
+            : undefined,
+        );
+        if (!response.ok) return;
+        const d = await response.json();
+        if (Array.isArray(d.characters)) setRoster(d.characters);
+        if (Array.isArray(d.threads))
+          persist(mergeThreads(d.threads, threadsRef.current));
+      } catch {
+        /* Seed characters and local conversations remain available. */
+      }
+    })();
+    return () => {
+      mounted = false;
+      requestRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, pending]);
+    listRef.current?.scrollTo({
+      top: listRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, pending, decision]);
 
-  async function send(text: string) {
+  async function send(text: string, selectedPlaceId?: string) {
     const trimmed = text.trim();
-    if (!trimmed || pending || !threadId) return;
+    if (!trimmed || busyRef.current || !threadId) return;
+    busyRef.current = true;
+    setPending(true);
+    setError("");
+    setRetry(undefined);
     setDraft("");
-    const userMsg: ChatMessage = {
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 35_000);
+    const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "guest",
       text: trimmed,
       createdAt: new Date().toISOString(),
     };
-    const pendingHistory = [...messages, userMsg];
-    setMessages(pendingHistory);
-    setPending(true);
+    const history = [...messages, userMessage].slice(-40);
+    setMessages(history);
     try {
-      const overlay = readOverlay();
-      const res = await fetch("/api/chat", {
+      const response = await fetch("/api/chat", {
         method: "POST",
+        signal: controller.signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           characterId,
-          guestId: readSession()?.guestId ?? "visitor",
+          guestId,
           message: trimmed,
           lang,
           threadId,
-          history: pendingHistory,
-          overlay: overlay ?? undefined,
+          history,
+          selectedPlaceId,
+          overlay: readOverlay() ?? undefined,
         }),
       });
-      const data = await res.json();
-      const nextMessages = data.message ? [...pendingHistory, data.message as ChatMessage] : pendingHistory;
+      if (!response.ok) throw new Error("chat-failed");
+      const data = await response.json();
+      if (!data.message || !data.result) throw new Error("invalid-response");
+      if (requestRef.current !== controller) return;
+      const nextMessages = [...history, data.message as ChatMessage];
+      const result = data.result as EngineResult;
       setMessages(nextMessages);
-      if (data.result) {
-        const result = data.result as EngineResult;
-        setFocusIds(result.placeIds);
-        setSelectedId(result.contextPlaceId);
-        setDecision(result.decision);
-        setSources(result.sources);
-        setDeepenOpen(true);
-      }
-      if (data.voice === "qwen" || data.voice === "engine") setVoice(data.voice);
-      if (data.llm?.configured != null) setLlmOn(Boolean(data.llm.configured));
+      setFocusIds(result.placeIds);
+      setSelectedId(result.contextPlaceId);
+      setDecision(result.decision);
+      if (Array.isArray(data.places))
+        setPlaces((prev) => mergePlaces(prev, data.places));
+      if (data.llm) setLlmOn(Boolean(data.llm.configured));
       if (data.status) setStatus(data.status);
-      if (Array.isArray(data.tourLog)) setTourLog(data.tourLog);
       const updated: Thread = {
         id: threadId,
-        guestId: readSession()?.guestId ?? "visitor",
+        guestId,
         guestName: readSession()?.name ?? "Visitor",
         characterId,
         lang,
-        messages: nextMessages.slice(-12),
-        placeIds: (data.result as EngineResult | undefined)?.placeIds ?? focusIds,
+        messages: nextMessages.slice(-40),
+        placeIds: result.placeIds,
+        decision: result.decision,
+        places: data.places,
+        recommendationIds: data.recommendationIds,
         updatedAt: new Date().toISOString(),
       };
-      persistThreads(mergeThreads([updated], Array.isArray(data.threads) ? data.threads : threads));
+      persist(mergeThreads(threadsRef.current, [updated]));
+    } catch {
+      if (requestRef.current !== controller) return;
+      setMessages(messages);
+      setError(
+        ko
+          ? "답변을 받지 못했어요. 연결을 확인하고 다시 시도해 주세요."
+          : "Couldn't get a reply. Check your connection and try again.",
+      );
+      setRetry({ text: trimmed, placeId: selectedPlaceId });
+      setDraft(trimmed);
     } finally {
-      setPending(false);
+      window.clearTimeout(timeout);
+      if (requestRef.current === controller) {
+        busyRef.current = false;
+        setPending(false);
+        requestRef.current = null;
+      }
     }
   }
 
   function pickOption(option: DecisionOption) {
-    setSelectedId(option.placeId);
-    const place = placeById(option.placeId, places);
-    if (!place || !threadId) return;
-    const nextMessages: ChatMessage[] = [
-      ...messages,
-      {
-        id: crypto.randomUUID(),
-        role: "guest",
-        text: lang === "ko" ? `${place.title.ko}로 갈게.` : `I'll go to ${place.title.en}.`,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: crypto.randomUUID(),
-        role: "character",
-        text:
-          lang === "ko"
-            ? `알겠어. ${place.title.ko}. ${place.note.ko}`
-            : `Good. ${place.title.en}. ${place.note.en}`,
-        placeIds: [place.id],
-        createdAt: new Date().toISOString(),
-      },
-    ];
-    setMessages(nextMessages);
-    setDeepenOpen(true);
-    persistThreads(
-      mergeThreads(
-        [
-          {
-            id: threadId,
-            guestId: readSession()?.guestId ?? "visitor",
-            guestName: readSession()?.name ?? "Visitor",
-            characterId,
-            lang,
-            messages: nextMessages.slice(-12),
-            placeIds: [place.id],
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-        threads,
-      ),
-    );
+    const p = placeById(option.placeId, places);
+    if (p)
+      void send(ko ? `${p.title.ko}로 갈게` : `I'll go to ${p.title.en}`, p.id);
   }
 
-  const headerBits = (
-    <>
-      <button
-        onClick={() => setLang((l) => (l === "en" ? "ko" : "en"))}
-        className="shrink-0 rounded-md border border-line px-2 py-1 text-xs"
-      >
-        {lang.toUpperCase()}
-      </button>
-      <Link href="/studio" className="shrink-0 text-xs text-ink-soft hover:text-ink">
-        Studio
+  async function feedback(value: "helpful" | "not-for-me") {
+    if (!thread || !lastReply || feedbackPending) return;
+    setFeedbackPending(true);
+    const updated: Thread = {
+      ...thread,
+      feedback: {
+        value,
+        messageId: lastReply.id,
+        createdAt: new Date().toISOString(),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      const response = await fetch("/api/runtime", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ op: "thread", thread: updated }),
+      });
+      if (!response.ok) throw new Error("feedback-failed");
+      persist(mergeThreads(threadsRef.current, [updated]));
+    } catch {
+      setError(
+        ko
+          ? "피드백을 저장하지 못했어요. 다시 눌러 주세요."
+          : "Feedback wasn't saved. Please try again.",
+      );
+    } finally {
+      setFeedbackPending(false);
+    }
+  }
+
+  const mode =
+    voice === "qwen"
+      ? "Qwen"
+      : voice === "engine"
+        ? ko
+          ? "규칙 답변"
+          : "Rule reply"
+        : llmOn
+          ? ko
+            ? "Qwen 준비됨"
+            : "Qwen ready"
+          : ko
+            ? "키 없이 체험"
+            : "Demo mode";
+  const header = (
+    <header className="city-header">
+      <Link href="/" className="city-brand">
+        <span className="brand-mark">
+          <Compass size={19} />
+        </span>
+        native city<span className="brand-period">.</span>
       </Link>
-    </>
+      <span className="city-location">
+        <span /> SEOUL, SEONGDONG
+      </span>
+      <div className="header-tools">
+        <span className="mode-badge">{mode}</span>
+        <button
+          onClick={() => setLang(ko ? "en" : "ko")}
+          aria-label={ko ? "Switch to English" : "한국어로 변경"}
+          className="language-button"
+        >
+          {ko ? "EN" : "한국어"}
+        </button>
+        <Link href="/studio" className="studio-link">
+          Studio <ArrowUpRight size={13} />
+        </Link>
+      </div>
+    </header>
   );
 
-  if (view === "home") {
+  if (view === "home")
     return (
-      <div className="pane-shell flex flex-col overflow-hidden bg-paper">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
-          <Link href="/" className="display shrink-0 text-lg">
-            Native City
-          </Link>
-          <span className="hidden shrink-0 text-[11px] tracking-wide text-ink-soft uppercase sm:inline">
-            {lang === "ko" ? "손님" : "Guest"}
-          </span>
-          <span
-            className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] sm:inline ${
-              status?.live ? "bg-seed/15 text-seed" : "bg-paper-2 text-ink-soft"
-            }`}
-          >
-            {status?.live ? "TourAPI live" : "TourAPI seed"}
-          </span>
-          <span className="hidden shrink-0 rounded-full bg-paper-2 px-2 py-0.5 text-[10px] text-ink-soft sm:inline">
-            {llmOn ? "Qwen" : lang === "ko" ? "규칙 엔진" : "rule engine"}
-          </span>
-          <div className="min-w-0 flex-1" />
-          {headerBits}
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-          <p className="text-[11px] tracking-wide text-ink-soft uppercase">
-            {lang === "ko" ? "대화" : "Chats"}
-          </p>
-          <div className="mt-2 space-y-2">
-            {inbox.length ? (
-              inbox.map((thread) => {
-                const ch = characterById(thread.characterId, roster);
-                return (
-                  <button
-                    key={thread.id}
-                    onClick={() => openThread(thread)}
-                    className="flex w-full items-start gap-3 rounded-2xl border border-line bg-card px-3 py-3 text-left hover:border-ink"
-                  >
-                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: ch.color }} />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{ch.name[lang]}</span>
-                        <span className="text-[10px] text-ink-soft">
-                          {new Date(thread.updatedAt).toLocaleString(lang === "ko" ? "ko-KR" : "en", {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </span>
-                      <span className="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-soft">{previewOf(thread)}</span>
-                    </span>
-                  </button>
-                );
-              })
-            ) : (
-              <p className="rounded-2xl border border-dashed border-line px-3 py-4 text-sm text-ink-soft">
-                {lang === "ko"
-                  ? "아직 대화가 없다. 아래에서 캐릭터를 고르면 새 채팅이 열린다."
-                  : "No chats yet. Pick a character below to start one."}
+      <div className="city-home">
+        {header}
+        <main className="city-discover">
+          <section className="discovery-intro">
+            <div>
+              <p className="eyebrow">
+                <span className="tiny-star">✳</span> A CITY, THROUGH SOMEONE’S
+                EYES
               </p>
-            )}
-          </div>
-
-          <p className="mt-8 text-[11px] tracking-wide text-ink-soft uppercase">
-            {lang === "ko" ? "캐릭터에게 물어보기" : "Ask a character"}
-          </p>
-          <p className="mt-1 text-xs text-ink-soft">
-            {lang === "ko"
-              ? "캐릭터는 AI다. 사람인 척하지 않는다. 새 대화를 열려면 고른다."
-              : "Characters are AI. They do not pretend to be human. Tap one to start a new chat."}
-          </p>
-          <div className="mt-3">
-            <p className="text-[10px] tracking-wide text-ink-soft uppercase">
-              {lang === "ko" ? "커뮤니티" : "Community"}
-            </p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {community.map((c) => (
-                <CharacterCard key={c.id} character={c} lang={lang} onPick={() => startChat(c.id)} />
-              ))}
+              <h1>
+                {ko ? (
+                  <>
+                    서울, 누구의 취향으로
+                    <br />
+                    <span>걸어볼까?</span>
+                  </>
+                ) : (
+                  <>
+                    Same city.
+                    <br />
+                    <span>A different point of view.</span>
+                  </>
+                )}
+              </h1>
+              <p className="intro-copy">
+                {ko
+                  ? "맛집 목록보다, 취향이 맞는 친구 한 명. 캐릭터를 고르고 오늘의 서울을 함께 찾아봐요."
+                  : "Find a point of view you click with. Pick an AI character and discover their version of Seoul."}
+              </p>
+              <div className="intro-steps">
+                <span>01 {ko ? "캐릭터 고르기" : "Pick a character"}</span>
+                <ChevronRight size={12} />
+                <span>02 {ko ? "답변 누르기" : "Choose a reply"}</span>
+                <ChevronRight size={12} />
+                <span>03 {ko ? "지도에서 만나기" : "See the map"}</span>
+              </div>
             </div>
-          </div>
-          <div className="mt-6 pb-8">
-            <p className="text-[10px] tracking-wide text-ink-soft uppercase">
-              {lang === "ko" ? "기본 · 사업자" : "House"}
-            </p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {house.map((c) => (
-                <CharacterCard key={c.id} character={c} lang={lang} onPick={() => startChat(c.id)} />
-              ))}
+            <div className="city-postcard" aria-hidden="true">
+              <span className="postcard-label">SEOUL FIELD NOTES · 01</span>
+              <svg viewBox="0 0 320 170" fill="none">
+                <path
+                  d="M-20 130Q70 65 145 115t200-20"
+                  stroke="#c4d8d0"
+                  strokeWidth="23"
+                />
+                <path
+                  d="m20 25 250 140M80-10l-20 190M190-10l-5 190M0 70l320-30"
+                  stroke="#e1d9c8"
+                  strokeWidth="10"
+                />
+                <path
+                  d="M53 98c15-40 84-76 137-44s47 82 77 72"
+                  stroke="#b65d3f"
+                  strokeWidth="2"
+                  strokeDasharray="4 5"
+                />
+                <circle cx="53" cy="98" r="7" fill="#b65d3f" />
+                <circle cx="189" cy="54" r="7" fill="#45685e" />
+                <circle cx="267" cy="126" r="7" fill="#cc9a47" />
+              </svg>
+              <span className="postcard-note">
+                {ko
+                  ? "같은 도시, 서로 다른 발견."
+                  : "Little detours. Better stories."}
+                <Footprints size={17} />
+              </span>
             </div>
-          </div>
-        </div>
+          </section>
+          <section aria-labelledby="characters-title">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">MEET YOUR CITY PEOPLE</p>
+                <h2 id="characters-title">
+                  {ko ? "오늘은 누구랑 갈까요?" : "Who’s your kind of guide?"}
+                </h2>
+              </div>
+              <span className="quiet-label">
+                {ko
+                  ? "사람이 가르친 취향 · AI 캐릭터"
+                  : "Human-shaped taste · AI characters"}
+              </span>
+            </div>
+            <div className="character-grid">
+              {[...communityCharacters(roster), ...houseCharacters(roster)].map(
+                (c) => (
+                  <button
+                    key={c.id}
+                    className="character-card"
+                    onClick={() => startChat(c.id)}
+                  >
+                    <div className="character-card-top">
+                      <CharacterAvatar character={c} size={76} />
+                      <span className="character-tag">
+                        {c.origin === "community" ? "COMMUNITY" : "HOUSE"}
+                      </span>
+                    </div>
+                    <h3>
+                      {c.name[lang]}
+                      <ArrowUpRight size={19} />
+                    </h3>
+                    <p className="character-taste">{tasteLabel(c, lang)}</p>
+                    <p className="character-description">{c.short[lang]}</p>
+                    <div className="character-byline">
+                      <span
+                        className="byline-dot"
+                        style={{ background: c.color }}
+                      />
+                      {ko ? "취향을 가르친 사람" : "Taste by"}
+                      <strong>{c.trainedBy[lang]}</strong>
+                    </div>
+                  </button>
+                ),
+              )}
+            </div>
+          </section>
+          {threads.some((t) => t.guestId === guestId) ? (
+            <section className="recent-section">
+              <div className="section-heading">
+                <h2>{ko ? "이어지는 이야기" : "Pick up where you left off"}</h2>
+                <MessageCircle size={18} />
+              </div>
+              <div className="recent-grid">
+                {threads
+                  .filter((t) => t.guestId === guestId)
+                  .slice(0, 3)
+                  .map((t) => {
+                    const c = characterById(t.characterId, roster);
+                    return (
+                      <button
+                        className="recent-chat"
+                        key={t.id}
+                        onClick={() => openThread(t)}
+                      >
+                        <CharacterAvatar character={c} size={42} />
+                        <span>
+                          <strong>{c.name[lang]}</strong>
+                          <small>{t.messages.at(-1)?.text}</small>
+                        </span>
+                        <ChevronRight size={16} />
+                      </button>
+                    );
+                  })}
+              </div>
+            </section>
+          ) : null}
+          <footer className="discovery-footer">
+            <span>
+              ✳{" "}
+              {ko
+                ? "추천마다 취향의 주인을 남깁니다."
+                : "Every recommendation has a point of view."}
+            </span>
+            <span>
+              {ko
+                ? "서울 데모 · 장소 정보는 방문 전 확인"
+                : "Seoul demo · Confirm details before visiting"}
+            </span>
+          </footer>
+        </main>
       </div>
     );
-  }
 
-  const deepen = (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4">
-      <DeepenBody
-        lang={lang}
-        character={character}
-        place={selected}
-        sources={sources}
-        status={status}
-        tourLog={tourLog}
-        decision={decision}
-        places={places}
-        voice={voice}
-        llmOn={llmOn}
-        onPick={pickOption}
-      />
+  const detail = (
+    <div className="place-sidebar">
+      <div className="sidebar-heading">
+        <span className="eyebrow">THE POINT OF VIEW</span>
+        <button
+          className="icon-button"
+          aria-label={ko ? "정보 닫기" : "Close details"}
+          onClick={() => setDeepenOpen(false)}
+        >
+          <X size={16} />
+        </button>
+      </div>
+      <div className="taste-profile">
+        <CharacterAvatar character={character} size={54} />
+        <div>
+          <h2>
+            {character.name[lang]}
+            {ko ? "의 서울" : "’s Seoul"}
+          </h2>
+          <p>{tasteLabel(character, lang)}</p>
+        </div>
+      </div>
+      <div className="attribution-note">
+        <span>
+          {ko ? "이 취향을 가르친 사람" : "THE TASTE BEHIND THE PICKS"}
+        </span>
+        <strong>{character.trainedBy[lang]}</strong>
+        <p>{character.trainerNote[lang]}</p>
+      </div>
+      {selected ? (
+        <section className="selected-place">
+          <p className="eyebrow">
+            {ko ? "지금 보고 있는 장소" : "ON YOUR MAP"}
+          </p>
+          <div className="place-title">
+            <h3>{selected.title[lang]}</h3>
+            <MapPin size={19} />
+          </div>
+          <p className="place-address">{selected.address[lang]}</p>
+          <p className="place-note">{selected.note[lang]}</p>
+          <div className="place-facts">
+            <span>
+              {ko ? "지역" : "Area"}
+              <strong>{selected.neighborhood[lang]}</strong>
+            </span>
+            <span>
+              {ko ? "영업시간" : "Hours"}
+              <strong>
+                {selected.openHours?.[lang] ??
+                  (ko ? "확인 필요" : "Check before visiting")}
+              </strong>
+            </span>
+            <span>
+              {ko ? "정보" : "Data"}
+              <strong>
+                {status?.live
+                  ? ko
+                    ? "TourAPI + 데모 큐레이션"
+                    : "TourAPI + demo curation"
+                  : ko
+                    ? "데모 시드 · 실시간 아님"
+                    : "Demo seed · not live"}
+              </strong>
+            </span>
+          </div>
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selected.title[lang]} ${selected.lat},${selected.lng}`)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="directions-link"
+          >
+            {ko ? "지도 앱에서 확인" : "Open in Maps"}
+            <ArrowUpRight size={16} />
+          </a>
+        </section>
+      ) : (
+        <div className="empty-place">
+          <MapPin size={25} />
+          <p>
+            {ko
+              ? "대화에서 옵션을 고르면 추천 장소와 이유가 여기에 보여요."
+              : "Choose a reply to see the places and the reasons behind them."}
+          </p>
+        </div>
+      )}
+      <section className="coverage-note">
+        <p className="eyebrow">
+          {ko ? "잘 아는 범위" : "IN THEIR NEIGHBORHOOD"}
+        </p>
+        <p>{character.coverage[lang]}</p>
+      </section>
+      <section className="commerce-placeholder">
+        <span>COMING LATER</span>
+        <h3>{ko ? "발견 다음엔, 경험." : "From a place to an experience."}</h3>
+        <p>
+          {ko
+            ? "캐릭터의 취향으로 만나는 로컬 액티비티. 예약 연결은 준비 중이에요."
+            : "Local activities through their taste. Booking connections are coming later."}
+        </p>
+      </section>
     </div>
   );
 
   return (
-    <PaneShell
-      deepenOpen={deepenOpen}
-      onDeepenToggle={() => setDeepenOpen((v) => !v)}
-      deepenLabel={lang === "ko" ? "심화" : "Deepen"}
-      evidenceRatio={mapRatio}
-      onEvidenceRatio={setMapRatio}
-      header={
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
-          <button
-            type="button"
-            onClick={() => setView("home")}
-            className="shrink-0 rounded-md px-2 py-1 text-xs hover:bg-paper-2"
-          >
-            {lang === "ko" ? "목록" : "Chats"}
-          </button>
-          <span className="display min-w-0 truncate text-lg">{character.name[lang]}</span>
-          <span className="hidden shrink-0 rounded-full bg-paper-2 px-2 py-0.5 text-[10px] text-ink-soft sm:inline">
-            {voice === "qwen" ? "Qwen" : llmOn ? (lang === "ko" ? "Qwen 대기" : "Qwen ready") : lang === "ko" ? "규칙 엔진" : "rule engine"}
-          </span>
-          <div className="min-w-0 flex-1" />
-          {headerBits}
-        </header>
-      }
-      action={
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-2 sm:px-4">
-            <div className="min-w-0">
-              <div className="text-sm font-medium">{character.name[lang]}</div>
-              <div className="truncate text-[11px] text-ink-soft">
-                {character.origin === "community"
-                  ? lang === "ko"
-                    ? `${character.trainedBy.ko}가 훈련 · 이 캐릭터에게 물어보는 중`
-                    : `Trained by ${character.trainedBy.en} · you are asking this character`
-                  : character.short[lang]}
+    <div className="city-chat">
+      <PaneShell
+        header={header}
+        deepenOpen={deepenOpen}
+        onDeepenToggle={() => setDeepenOpen((v) => !v)}
+        deepenLabel={ko ? "추천 이유 · 장소 정보" : "Taste & place details"}
+        evidenceRatio={mapRatio}
+        onEvidenceRatio={setMapRatio}
+        deepen={detail}
+        action={
+          <div className="conversation">
+            <div className="conversation-heading">
+              <button
+                className="icon-button"
+                aria-label={ko ? "캐릭터 목록" : "All characters"}
+                onClick={() => {
+                  requestRef.current?.abort();
+                  requestRef.current = null;
+                  busyRef.current = false;
+                  setPending(false);
+                  setView("home");
+                }}
+              >
+                <ArrowLeft size={19} />
+              </button>
+              <CharacterAvatar character={character} size={40} />
+              <div>
+                <h1>
+                  {character.name[lang]}
+                  <span>AI</span>
+                </h1>
+                <p>
+                  {character.trainedBy[lang]}
+                  {ko ? "의 취향으로 추천" : "’s point of view"}
+                </p>
               </div>
+              <button
+                className="new-chat-button"
+                disabled={pending}
+                onClick={() => startChat(character.id)}
+              >
+                <Plus size={15} />
+                <span>{ko ? "새 대화" : "New chat"}</span>
+              </button>
             </div>
-            <span className="hidden shrink-0 rounded-full bg-paper-2 px-2 py-0.5 text-[10px] text-ink-soft sm:inline">
-              {lang === "ko" ? "AI 캐릭터 · 사람인 척하지 않음" : "AI character · not pretending to be human"}
-            </span>
-          </div>
-          <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
-            {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.role === "guest" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                    m.role === "guest"
-                      ? "rounded-br-sm bg-ink text-card"
-                      : "rounded-bl-sm border border-line bg-card"
-                  }`}
-                >
-                  {m.text}
-                </div>
+            <div
+              ref={listRef}
+              className="message-list"
+              role="log"
+              aria-label={ko ? "캐릭터와 대화" : "Character conversation"}
+              aria-live="polite"
+              aria-busy={pending}
+            >
+              <div className="conversation-date">
+                {ko
+                  ? "우리만의 서울을 찾는 중"
+                  : "FINDING YOUR VERSION OF SEOUL"}
               </div>
-            ))}
-            {pending ? <div className="text-xs text-ink-soft">{character.name[lang]}…</div> : null}
-            {messages.length <= 1 ? (
-              <div className="flex flex-wrap gap-2 pt-2">
-                {chipsFor(character, lang).map((chip) => (
+              {messages.map((m) => (
+                <div
+                  className={`message-row ${m.role === "guest" ? "is-guest" : "is-character"}`}
+                  key={m.id}
+                >
+                  {m.role === "character" ? (
+                    <CharacterAvatar character={character} size={30} />
+                  ) : null}
+                  <div className="message-content">
+                    {m.role === "character" ? (
+                      <span className="message-author">
+                        {m.attribution?.characterName ?? character.name[lang]}
+                        <small>
+                          {m.voice === "qwen"
+                            ? "Qwen"
+                            : m.voice === "engine"
+                              ? ko
+                                ? "규칙 답변"
+                                : "Rule reply"
+                              : "AI"}
+                        </small>
+                      </span>
+                    ) : null}
+                    <div className="message-bubble">{m.text}</div>
+                    {m.attribution && m.placeIds?.length ? (
+                      <div className="message-attribution">
+                        ↳ {m.attribution.trainedBy}
+                        {ko
+                          ? "의 기준으로 고른 추천"
+                          : "’s taste behind this pick"}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {pending ? (
+                <div className="typing-indicator" role="status">
+                  <span />
+                  <span />
+                  <span />
+                  <small>
+                    {character.name[lang]}
+                    {ko ? "가 고르고 있어요" : " is thinking"}
+                  </small>
+                </div>
+              ) : null}
+              {!pending && decision ? (
+                <div className="reply-options">
+                  <p className="eyebrow">
+                    {ko
+                      ? "마음이 가는 곳을 골라요"
+                      : "WHICH ONE FEELS LIKE YOU?"}
+                  </p>
+                  {decision.options.map((option, i) => {
+                    const p = placeById(option.placeId, places);
+                    return p ? (
+                      <button
+                        key={p.id}
+                        className="place-option"
+                        onClick={() => pickOption(option)}
+                      >
+                        <span className="option-number">0{i + 1}</span>
+                        <span>
+                          <strong>{p.title[lang]}</strong>
+                          <small>{option.why[lang]}</small>
+                        </span>
+                        <ArrowUpRight size={16} />
+                      </button>
+                    ) : null;
+                  })}
+                </div>
+              ) : null}
+              {!pending && lastReply ? (
+                <div className="feedback-bar">
+                  <span>
+                    {ko
+                      ? "이 추천, 나와 맞나요?"
+                      : "Your kind of recommendation?"}
+                  </span>
                   <button
-                    key={chip}
-                    onClick={() => send(chip)}
-                    className="rounded-full border border-line bg-card px-3 py-1.5 text-left text-xs hover:border-ink"
+                    disabled={feedbackPending}
+                    aria-pressed={
+                      thread?.feedback?.messageId === lastReply.id &&
+                      thread.feedback.value === "helpful"
+                    }
+                    onClick={() => feedback("helpful")}
                   >
-                    {chip}
+                    <ThumbsUp size={13} />
+                    {ko ? "좋아요" : "Helpful"}
+                  </button>
+                  <button
+                    disabled={feedbackPending}
+                    aria-pressed={
+                      thread?.feedback?.messageId === lastReply.id &&
+                      thread.feedback.value === "not-for-me"
+                    }
+                    onClick={() => feedback("not-for-me")}
+                  >
+                    <ThumbsDown size={13} />
+                    {ko ? "내 취향은 아냐" : "Not for me"}
+                  </button>
+                  {thread?.feedback?.messageId === lastReply.id ? (
+                    <small>
+                      <Check size={12} />
+                      {ko ? "트레이너 검토용 저장" : "Saved for trainer review"}
+                    </small>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <div className="reply-dock">
+              <div className="quick-replies">
+                {promptsFor(character, lang).map((prompt) => (
+                  <button
+                    key={prompt}
+                    disabled={pending}
+                    onClick={() => send(prompt)}
+                  >
+                    {prompt}
+                    <ChevronRight size={13} />
                   </button>
                 ))}
               </div>
-            ) : null}
-          </div>
-          <form
-            className="shrink-0 border-t border-line p-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              send(draft);
-            }}
-          >
-            <div className="flex gap-2">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={lang === "ko" ? `${character.name.ko}에게 물어보기` : `Ask ${character.name.en}`}
-                className="flex-1 rounded-md border border-line bg-card px-3 py-2 text-sm outline-none"
-              />
-              <button className="rounded-md bg-ink px-4 py-2 text-sm text-card">
-                {lang === "ko" ? "보내기" : "Send"}
-              </button>
-            </div>
-          </form>
-        </div>
-      }
-      evidence={
-        <>
-          <MapCanvas
-            lang={lang}
-            places={mapPlaces}
-            selectedId={selectedId}
-            active
-            onSelect={(id) => {
-              setSelectedId(id);
-              setDeepenOpen(true);
-            }}
-          />
-          <div className="absolute top-2 left-2 z-[500] rounded-md bg-card/90 px-2 py-1 text-[10px] text-ink-soft">
-            {HOSTEL.name[lang]} · {lang === "ko" ? "근거 · 지도" : "evidence · map"}
-          </div>
-        </>
-      }
-      deepen={deepen}
-    />
-  );
-}
-
-function CharacterCard({
-  character,
-  lang,
-  onPick,
-}: {
-  character: Character;
-  lang: Lang;
-  onPick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onPick}
-      className="rounded-2xl border border-line bg-card p-4 text-left hover:border-ink"
-    >
-      <span className="flex h-2 w-8 rounded-full" style={{ background: character.color }} />
-      <span className="mt-3 block display text-2xl">{character.name[lang]}</span>
-      <span className="mt-1 block text-[11px] text-ink-soft">{character.trainedBy[lang]}</span>
-      <span className="mt-2 block text-sm leading-relaxed text-ink-soft">{character.short[lang]}</span>
-    </button>
-  );
-}
-
-function DeepenBody({
-  lang,
-  character,
-  place,
-  sources,
-  status,
-  tourLog,
-  decision,
-  places,
-  voice,
-  llmOn,
-  onPick,
-}: {
-  lang: Lang;
-  character: Character;
-  place?: Place;
-  sources: SourceBadge[];
-  status?: TourStatus;
-  tourLog: { path: string; ok: boolean; service: string }[];
-  decision?: EngineResult["decision"];
-  places: Place[];
-  voice: "qwen" | "engine";
-  llmOn: boolean;
-  onPick: (option: DecisionOption) => void;
-}) {
-  const lastCall = tourLog.find((c) => c.ok) ?? tourLog[0];
-  return (
-    <div className="space-y-5 text-sm">
-      {decision ? (
-        <section className="space-y-3">
-          <div className="text-[10px] tracking-wide text-ink-soft uppercase">
-            {lang === "ko" ? "결정" : "Decision"}
-          </div>
-          <p>{decision.prompt[lang]}</p>
-          {decision.options.map((opt, i) => {
-            const optionPlace = placeById(opt.placeId, places);
-            if (!optionPlace) return null;
-            const selected = place?.id === optionPlace.id;
-            return (
-              <button
-                key={opt.placeId}
-                onClick={() => onPick(opt)}
-                className={`w-full rounded-lg border p-3 text-left ${
-                  selected ? "border-ink bg-paper-2" : "border-line hover:border-ink"
-                }`}
+              {error ? (
+                <div className="chat-error" role="alert">
+                  {error}
+                  {retry ? (
+                    <button
+                      onClick={() => send(retry.text, retry.placeId)}
+                      disabled={pending}
+                    >
+                      {ko ? "다시 시도" : "Retry"}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+              <form
+                className="composer"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void send(draft);
+                }}
               >
-                <div className="text-[10px] text-ink-soft">{i + 1}</div>
-                <div className="font-medium">{optionPlace.title[lang]}</div>
-                <div className="text-xs text-ink-soft">{opt.why[lang]}</div>
-              </button>
-            );
-          })}
-        </section>
-      ) : null}
-
-      {place ? (
-        <section className="space-y-2 rounded-lg border border-line p-3">
-          <div className="text-[10px] tracking-wide text-ink-soft uppercase">
-            {lang === "ko" ? "장소 사실" : "Place facts"}
-          </div>
-          <div className="display text-xl">{place.title[lang]}</div>
-          <div className="text-ink-soft">{place.address[lang]}</div>
-          {place.openHours ? <div className="text-xs">{place.openHours[lang]}</div> : null}
-          <p className="leading-relaxed">{place.overview[lang]}</p>
-          <p className="text-xs leading-relaxed text-ink-soft">{place.note[lang]}</p>
-          <div className="flex flex-wrap gap-1">
-            {place.sources.map((s) => (
-              <span key={s} className="rounded-full bg-paper-2 px-2 py-0.5 text-[10px]">
-                {s === "kto" ? "KTO OpenAPI" : s}
-              </span>
-            ))}
-            {place.guestSeedCount ? (
-              <span className="rounded-full bg-seed/10 px-2 py-0.5 text-[10px] text-seed">
-                seed {place.guestSeedCount}
-              </span>
-            ) : null}
-          </div>
-        </section>
-      ) : (
-        <p className="text-ink-soft">
-          {lang === "ko"
-            ? "지도의 점을 누르거나 대화를 시작하면 여기 사실이 뜬다."
-            : "Tap a map pin or start talking and facts land here."}
-        </p>
-      )}
-
-      <section className="space-y-1">
-        <div className="text-[10px] tracking-wide text-ink-soft uppercase">
-          {lang === "ko" ? "커버리지" : "Coverage"}
-        </div>
-        <p className="text-xs leading-relaxed text-ink-soft">{character.coverage[lang]}</p>
-      </section>
-
-      <section className="space-y-1">
-        <div className="text-[10px] tracking-wide text-ink-soft uppercase">
-          {lang === "ko" ? "출처" : "Sources"}
-        </div>
-        <div className="text-xs text-ink-soft">
-          {voice === "qwen"
-            ? lang === "ko"
-              ? "말투 Qwen · 후보는 판정 엔진 · 사실은 TourAPI"
-              : "Voice Qwen · ranking from the harness · facts from TourAPI"
-            : llmOn
-              ? lang === "ko"
-                ? "Qwen 키는 들어 있으나 이번 답은 규칙 엔진"
-                : "Qwen key is set; this reply used the rule engine"
-              : lang === "ko"
-                ? "규칙 엔진. Studio → 장소에 Qwen 키를 넣으면 말투만 LLM이 맡는다."
-                : "Rule engine. Paste a Qwen key in Studio → Places to voice the reply."}
-        </div>
-        {sources.length ? (
-          sources.map((s) => (
-            <div key={s.label} className="text-xs text-ink-soft">
-              {s.label}
-              {s.endpoint ? ` · ${s.endpoint}` : ""}
+                <input
+                  aria-label={ko ? "직접 답변 입력" : "Write your reply"}
+                  value={draft}
+                  maxLength={2000}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder={
+                    ko
+                      ? "옵션을 고르거나, 하고 싶은 말을 적어요"
+                      : "Choose a reply, or say it your way"
+                  }
+                />
+                <button
+                  type="submit"
+                  aria-label={ko ? "보내기" : "Send message"}
+                  disabled={pending || !draft.trim()}
+                >
+                  <ArrowUp size={19} />
+                </button>
+              </form>
+              <p className="composer-note">
+                {ko
+                  ? "AI 캐릭터 · 데모 추천이며 영업·식재료는 방문 전 확인해 주세요."
+                  : "AI character · Demo recommendations. Confirm hours and ingredients before visiting."}
+              </p>
             </div>
-          ))
-        ) : (
-          <div className="text-xs text-ink-soft">
-            {status?.live
-              ? status.endpoint
-              : lang === "ko"
-                ? "시드 캐시 (키를 넣으면 TourAPI 실시간)"
-                : "Seed cache until TOUR_API_KEY is set"}
           </div>
-        )}
-        {lastCall ? (
-          <div className="text-[10px] text-ink-soft">
-            last {lastCall.service}/{lastCall.path} {lastCall.ok ? "0000" : "fail"}
-          </div>
-        ) : null}
-      </section>
+        }
+        evidence={
+          <>
+            <MapCanvas
+              lang={lang}
+              places={mapPlaces}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                setSelectedId(id);
+                setDeepenOpen(true);
+              }}
+            />
+            <div className="map-caption">
+              <MapPin size={14} />
+              <strong>
+                {ko
+                  ? "대화가 지도가 되는 순간"
+                  : "Your conversation, on the map"}
+              </strong>
+              <span>
+                {focusIds.length
+                  ? `${mapPlaces.length} ${ko ? "곳의 추천" : "picks"}`
+                  : HOSTEL.neighborhood[lang]}
+              </span>
+            </div>
+          </>
+        }
+      />
     </div>
   );
 }

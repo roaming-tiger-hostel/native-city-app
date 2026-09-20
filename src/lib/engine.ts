@@ -48,12 +48,9 @@ export function mergePlaces(seed: Place[], live: Place[]): Place[] {
   }
   for (const livePlace of live) {
     const existing =
+      byKey.get(livePlace.id) ||
       (livePlace.contentId && byKey.get(livePlace.contentId)) ||
-      [...byKey.values()].find(
-        (s) =>
-          s.title.ko === livePlace.title.ko ||
-          Math.abs(s.lat - livePlace.lat) < 0.0004,
-      );
+      [...byKey.values()].find((s) => s.title.ko === livePlace.title.ko);
     if (existing) {
       const merged: Place = {
         ...existing,
@@ -103,20 +100,20 @@ export function rankPlaces(opts: {
   const porkFree = Boolean(opts.guest.porkFree || opts.character.porkFree);
   const vegetarian = Boolean(opts.guest.vegetarian || opts.character.vegetarian);
   const constrained = inKind.filter((p) => {
-    if (porkFree && p.porkFree === false && (p.kind === "food" || p.kind === "market")) {
+    if (porkFree && p.porkFree !== true && (p.kind === "food" || p.kind === "market")) {
       return false;
     }
-    if (vegetarian && p.vegetarianFriendly === false && p.kind === "food") {
+    if (vegetarian && p.vegetarianFriendly !== true && (p.kind === "food" || p.kind === "market")) {
       return false;
     }
     if (opts.character.vetoTouristTrap && (p.axes.touristTrap ?? 0) >= 0.9) return false;
-    if (opts.intent === "night" && opts.guest.lateNight && p.kind === "food" && p.openLate === false) {
+    if (opts.guest.lateNight && (p.kind === "food" || p.kind === "market") && p.openLate !== true) {
       return false;
     }
     return true;
   });
 
-  const pool = constrained.length ? constrained : inKind;
+  const pool = constrained;
 
   return withDistance(pool)
     .map((p) => {
@@ -141,14 +138,14 @@ export function rankPlaces(opts: {
 function whyFor(character: Character, place: Place): Localized {
   if (character.porkFree && place.porkFree) {
     return {
-      ko: "돼지 없는 집. 이 캐릭터가 실제로 판정한 기준.",
-      en: "Pork-free. A place this character has actually judged.",
+      ko: "돼지고기 없는 메뉴로 분류된 데모 후보. 재료·조리 방식은 방문 전 확인해 줘.",
+      en: "A demo candidate tagged pork-free. Confirm ingredients and preparation before visiting.",
     };
   }
   if (character.id === "nuri" && place.guestSeedCount > 8) {
     return {
-      ko: `여기 묵은 손님 ${place.guestSeedCount}명이 실제로 갔다.`,
-      en: `${place.guestSeedCount} guests staying here actually went.`,
+      ko: `데모 손님 선호 ${place.guestSeedCount}건이 반영된 후보야.`,
+      en: `${place.guestSeedCount} sample guest preferences support this pick.`,
     };
   }
   if (character.origin === "community") {
@@ -196,7 +193,7 @@ function sourcesFor(places: Place[], usedLiveKto: boolean): SourceBadge[] {
     badges.push({ kind: "curated", label: "호스트 큐레이션 (취향 레이어)" });
   }
   if (places.some((p) => p.sources.includes("hostel-log"))) {
-    badges.push({ kind: "hostel-log", label: "호스텔 게스트 행동 로그" });
+    badges.push({ kind: "hostel-log", label: "호스텔 게스트 행동 예시 데이터" });
   }
   return badges;
 }
@@ -221,7 +218,7 @@ function composeSpeech(
         ? `${top.title.ko} — ${top.why.ko}`
         : `${top.title.ko}부터.`,
       second ? `차선은 ${second.title.ko}. ${second.why.ko}` : null,
-      top.distMeters != null ? `호스텔에서 약 ${Math.round(top.distMeters / 80)}분.` : null,
+      top.distMeters != null ? `호스텔에서 직선거리 약 ${(top.distMeters / 1000).toFixed(1)}km.` : null,
     ]
       .filter(Boolean)
       .join(" ");
@@ -231,7 +228,7 @@ function composeSpeech(
         ? `${top.title.en} — ${top.why.en}`
         : `Start with ${top.title.en}.`,
       second ? `Backup: ${second.title.en}. ${second.why.en}` : null,
-      top.distMeters != null ? `About ${Math.round(top.distMeters / 80)} min from the hostel.` : null,
+      top.distMeters != null ? `About ${(top.distMeters / 1000).toFixed(1)} km from the hostel in a straight line.` : null,
     ]
       .filter(Boolean)
       .join(" ");
@@ -244,7 +241,7 @@ function composeSpeech(
       trap ? `${trap.title.ko}는 별점 말고 걸러.` : null,
       `${top.title.ko}. ${top.note.ko}`,
       second ? `굳이 하나 더면 ${second.title.ko}.` : "그 이상은 안 찍어.",
-      "맛있는지는 검색이 투표 못 해. 문 닫았는지만 공사 데이터로 봤어.",
+      "내가 배운 취향으로 골랐어. 현재 영업 여부는 방문 전에 확인해 줘.",
     ]
       .filter(Boolean)
       .join(" ");
@@ -282,7 +279,7 @@ function composeSpeech(
     pork ? "돼지 안 먹는 기준으로 골랐어." : `${character.trainedBy.ko}가 가르친 기준이야.`,
     `${top.title.ko} — ${top.why.ko}`,
     second ? `차선은 ${second.title.ko}.` : null,
-    top.distMeters != null ? `호스텔에서 약 ${Math.round(top.distMeters / 80)}분.` : null,
+    top.distMeters != null ? `호스텔에서 직선거리 약 ${(top.distMeters / 1000).toFixed(1)}km.` : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -290,7 +287,7 @@ function composeSpeech(
     pork ? "I picked from pork-free places." : `This is ${character.trainedBy.en}'s judgment.`,
     `${top.title.en} — ${top.why.en}`,
     second ? `Backup: ${second.title.en}.` : null,
-    top.distMeters != null ? `About ${Math.round(top.distMeters / 80)} min from the hostel.` : null,
+    top.distMeters != null ? `About ${(top.distMeters / 1000).toFixed(1)} km from the hostel in a straight line.` : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -307,32 +304,46 @@ export function runEngine(opts: {
   usedLiveKto?: boolean;
   lang?: Lang;
   character?: Character;
+  history?: string[];
 }): EngineResult {
   const character =
     opts.character ?? CHARACTERS.find((c) => c.id === opts.characterId) ?? CHARACTERS.find((c) => c.id === "maya") ?? CHARACTERS[0];
   const places = opts.places ?? PLACES;
-  const intent = classifyIntent(opts.message);
+  const context = [...(opts.history ?? []), opts.message].join("\n");
+  const guest = {
+    ...opts.guest,
+    porkFree: opts.guest.porkFree || /no[- ]?pork|(?:don.t|can.t|cannot) eat pork|without pork|avoid pork|pork[- ]free|할랄|halal|돼지.*(못|안|불가|빼|제외|없)/i.test(context),
+    vegetarian: opts.guest.vegetarian || /vegetarian|vegan|채식|비건/i.test(context),
+    lateNight: opts.guest.lateNight || /11\s*pm|midnight|late[- ]night|밤\s*(?:11|12)|23\s*시|자정|야식|늦은\s*밤/i.test(context),
+  };
+  const currentIntent = classifyIntent(opts.message);
+  const intent = currentIntent === "any"
+    ? [...(opts.history ?? [])].reverse().map(classifyIntent).find((i) => i !== "any") ?? currentIntent
+    : currentIntent;
   const ranked = rankPlaces({
     character,
     places,
-    guest: opts.guest,
+    guest,
     intent,
     judgments: opts.judgments,
-  }).slice(0, 4);
+  });
 
   const inCoverage = ranked.filter((p) => character.kinds.includes(p.kind));
-  const chosen = inCoverage.length ? inCoverage : ranked;
+  const chosen = inCoverage.slice(0, 3);
 
-  if (!chosen.length || (character.vetoTouristTrap && chosen[0] && !character.kinds.includes(chosen[0].kind))) {
+  if (!chosen.length) {
     return {
-      text: character.lines.unknown,
+      text: {
+        ko: "지금 조건과 내 추천 범위에 맞는 곳을 찾지 못했어. 조건에 맞지 않는 장소를 대신 추천하진 않을게. 다른 활동을 골라 볼래?",
+        en: "I couldn't find a place within my coverage that meets these conditions. Want to try another activity?",
+      },
       placeIds: [],
       sources: sourcesFor([], opts.usedLiveKto ?? false),
       usedLiveKto: opts.usedLiveKto ?? false,
     };
   }
 
-  const text = composeSpeech(character, chosen, intent, opts.guest, opts.lang ?? "en");
+  const text = composeSpeech(character, chosen, intent, guest, opts.lang ?? "en");
   const options: DecisionOption[] = chosen.slice(0, 3).map((p) => ({
     placeId: p.id,
     why: p.why,
@@ -343,7 +354,7 @@ export function runEngine(opts: {
     placeIds: chosen.map((p) => p.id),
     contextPlaceId: chosen[0]?.id,
     decision:
-      options.length >= 2
+      options.length >= 1
         ? {
             prompt: {
               ko: "어디로 갈래? 취향은 캐릭터가, 결정은 네가.",

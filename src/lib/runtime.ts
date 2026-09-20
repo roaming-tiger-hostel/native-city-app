@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { CHARACTERS, GUESTS, JUDGMENTS, makeCommunityCharacter, placeById } from "./catalog";
+import { CHARACTERS, JUDGMENTS, makeCommunityCharacter, placeById } from "./catalog";
 import { applyJudgment } from "./train";
 import type {
   AxisId,
@@ -30,32 +30,7 @@ function empty(): RuntimeState {
     judgments: JUDGMENTS,
     weights: {},
     extras: [],
-    threads: [
-      {
-        id: "demo-visitor-maya",
-        guestId: "visitor",
-        guestName: GUESTS[0].name,
-        characterId: "maya",
-        lang: "en",
-        messages: [
-          {
-            id: "d1",
-            role: "guest",
-            text: "It's 11pm and I don't eat pork. Where should I eat?",
-            createdAt: "2026-09-18T11:00:00.000Z",
-          },
-          {
-            id: "d2",
-            role: "character",
-            text: "I picked from pork-free places. Muhak-ro Chicken Soup — a place this character has actually judged.",
-            placeIds: ["muhak-dak", "itaewon-kebab", "euljiro-nogari"],
-            createdAt: "2026-09-18T11:00:02.000Z",
-          },
-        ],
-        placeIds: ["muhak-dak", "itaewon-kebab", "euljiro-nogari"],
-        updatedAt: "2026-09-18T11:00:02.000Z",
-      },
-    ],
+    threads: [],
     tourLog: [],
   };
 }
@@ -69,7 +44,7 @@ function normalize(raw: Partial<RuntimeState>): RuntimeState {
   return {
     judgments: [...byId.values()],
     weights: raw.weights ?? {},
-    threads: raw.threads?.length ? raw.threads : base.threads,
+    threads: raw.threads ?? base.threads,
     tourLog: raw.tourLog ?? [],
     extras: (raw.extras ?? []).map((c) => ({
       ...c,
@@ -126,7 +101,9 @@ export function ingestOverlay(overlay?: {
   }
   if (overlay.threads?.length) {
     const byId = new Map(state.threads.map((t) => [t.id, t]));
-    for (const t of overlay.threads) byId.set(t.id, t);
+    for (const t of overlay.threads) {
+      if (!byId.has(t.id) || t.updatedAt >= byId.get(t.id)!.updatedAt) byId.set(t.id, t);
+    }
     state.threads = [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 40);
   }
   save(state);
@@ -204,10 +181,11 @@ export function recordTourCall(call: TourCall) {
 export function correctThread(threadId: string): RuntimeState | { error: string } {
   const state = load();
   const thread = state.threads.find((t) => t.id === threadId);
-  if (!thread || thread.placeIds.length < 2) {
+  const candidates = thread?.recommendationIds ?? thread?.placeIds ?? [];
+  if (!thread || candidates.length < 2) {
     return { error: "교정할 추천 쌍이 없다" };
   }
-  const [loserId, winnerId] = thread.placeIds;
+  const [loserId, winnerId] = candidates;
   const winner = placeById(winnerId);
   const loser = placeById(loserId);
   const character = trainedCharacter(thread.characterId);

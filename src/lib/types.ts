@@ -111,6 +111,8 @@ export type ChatMessage = {
   placeIds?: string[];
   sources?: SourceBadge[];
   createdAt: string;
+  voice?: "qwen" | "engine";
+  attribution?: { characterId: string; characterName: string; trainedBy: string };
 };
 
 export type SourceBadge = {
@@ -169,4 +171,8 @@ export type Thread = {
   messages: ChatMessage[];
   placeIds: string[];
   updatedAt: string;
+  decision?: EngineResult["decision"];
+  places?: Place[];
+  recommendationIds?: string[];
+  feedback?: { value: "helpful" | "not-for-me"; messageId: string; createdAt: string };
 };

@@ -22,7 +22,7 @@ const FILE = join(
 const ENV_LOCAL = join(process.cwd(), ".env.local");
 const BOOT_TOUR = (process.env.TOUR_API_KEY ?? "").trim();
 const BOOT_LLM =
-  (process.env.LLM_API_KEY ?? process.env.QWEN_API_KEY ?? process.env.DASHSCOPE_API_KEY ?? process.env.OPENROUTER_API_KEY ?? "").trim();
+  [process.env.LLM_API_KEY, process.env.QWEN_API_KEY, process.env.DASHSCOPE_API_KEY, process.env.OPENROUTER_API_KEY].map((key) => key?.trim()).find(Boolean) ?? "";
 const BOOT_LLM_BASE = (process.env.LLM_BASE_URL ?? "").trim();
 const BOOT_LLM_MODEL = (process.env.LLM_MODEL ?? "").trim();
 

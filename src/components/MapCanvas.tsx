@@ -19,6 +19,7 @@ export function MapCanvas({ places, selectedId, onSelect, lang = "en", active = 
   const markersRef = useRef<Marker[]>([]);
   const onSelectRef = useRef(onSelect);
   const [ready, setReady] = useState(false);
+  const [tileUnavailable, setTileUnavailable] = useState(false);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -34,9 +35,10 @@ export function MapCanvas({ places, selectedId, onSelect, lang = "en", active = 
         scrollWheelZoom: true,
       }).setView([HOSTEL.lat, HOSTEL.lng], 14);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-      }).addTo(map);
+      }).on("tileerror", () => { if (!cancelled) setTileUnavailable(true); })
+        .on("tileload", () => { if (!cancelled) setTileUnavailable(false); }).addTo(map);
       L.control.zoom({ position: "topright" }).addTo(map);
       mapRef.current = map;
       setReady(true);
@@ -75,18 +77,20 @@ export function MapCanvas({ places, selectedId, onSelect, lang = "en", active = 
       hostel.bindTooltip(HOSTEL.name[lang], { direction: "top" });
       markersRef.current.push(hostel);
 
-      for (const place of places) {
+      for (const [index, place] of places.entries()) {
         const selected = place.id === selectedId;
-        const size = selected ? 16 : 12;
+        const size = selected ? 30 : 24;
         const icon = L.divIcon({
           className: "",
-          html: `<div style="width:${size}px;height:${size}px;border-radius:99px;background:${selected ? "#c45c26" : "#1b1712"};border:2px solid #faf6ee;box-shadow:0 0 0 ${selected ? 4 : 0}px rgba(196,92,38,.25)"></div>`,
+          html: `<div style="display:grid;place-items:center;width:${size}px;height:${size}px;border-radius:99px;background:${selected ? "#b75b3d" : "#526849"};color:#fffefa;font-size:11px;font-weight:600;border:2px solid #fffefa;box-shadow:0 2px 8px #27331f30">${index + 1}</div>`,
           iconSize: [size, size],
           iconAnchor: [size / 2, size / 2],
         });
-        const marker = L.marker([place.lat, place.lng], { icon }).addTo(map);
+        const marker = L.marker([place.lat, place.lng], { icon, title: place.title[lang], alt: place.title[lang], keyboard: true }).addTo(map);
         marker.on("click", () => onSelectRef.current(place.id));
-        marker.bindTooltip(place.title[lang], { direction: "top" });
+        const tooltip = document.createElement("span");
+        tooltip.textContent = place.title[lang];
+        marker.bindTooltip(tooltip, { direction: "top" });
         markersRef.current.push(marker);
       }
 
@@ -142,5 +146,10 @@ export function MapCanvas({ places, selectedId, onSelect, lang = "en", active = 
     };
   }, [ready, places, active]);
 
-  return <div ref={ref} className="h-full min-h-[140px] w-full" />;
+  return <div className="relative h-full w-full">
+    <div ref={ref} aria-label={lang === "ko" ? "추천 장소 지도" : "Recommended places map"} className="h-full min-h-[140px] w-full" />
+    {tileUnavailable ? <div role="status" className="absolute bottom-6 left-3 z-[500] rounded bg-card/95 px-2 py-1 text-[10px] text-ink-soft">
+      {lang === "ko" ? "지도 배경 연결 불가 · 장소 핀은 계속 선택할 수 있어요" : "Map tiles unavailable · place pins still work"}
+    </div> : null}
+  </div>;
 }

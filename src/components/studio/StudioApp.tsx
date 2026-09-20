@@ -75,10 +75,13 @@ export function StudioApp() {
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
-    if (mq.matches) {
-      setDeepenOpen(true);
-      setHistoryOpen(true);
-    }
+    const sync = () => {
+      setDeepenOpen(mq.matches);
+      setHistoryOpen(mq.matches);
+    };
+    const frame = requestAnimationFrame(sync);
+    mq.addEventListener("change", sync);
+    return () => { cancelAnimationFrame(frame); mq.removeEventListener("change", sync); };
   }, []);
 
   useEffect(() => {
@@ -704,7 +707,7 @@ function ConversationAction({
               }`}
             >
               <div className="text-xs text-ink-soft">
-                {t.guestName} · {t.characterId} · {t.lang}
+                {t.guestName}{t.feedback ? ` · ${t.feedback.value === "helpful" ? "👍" : "👎"} 피드백` : ""} · {t.characterId} · {t.lang}
               </div>
               <div className="mt-1 line-clamp-2 text-sm">{t.messages.at(-1)?.text}</div>
             </button>

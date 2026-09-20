@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 type Side = "left" | "right";
 
@@ -173,9 +173,30 @@ function Sheet({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    dialog?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
+      if (event.key !== "Tab" || !dialog) return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]'));
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (!first || !last) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog)) { event.preventDefault(); first.focus(); }
+    };
+    dialog?.addEventListener("keydown", onKey);
+    return () => { dialog?.removeEventListener("keydown", onKey); previous?.focus(); };
+  }, []);
+
   if (side === "bottom") {
     return (
-      <div className="absolute inset-0 z-[1200] flex flex-col justify-end">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} className="absolute inset-0 z-[1200] flex flex-col justify-end">
         <button type="button" className="min-h-10 flex-1 bg-ink/15" aria-label="Close pane" onClick={onClose} />
         <aside className="pane-sheet-up flex h-[min(78%,42rem)] w-full flex-col border-t border-line bg-card shadow-[0_-12px_40px_rgba(27,23,18,0.12)]">
           <div className="flex h-10 shrink-0 items-center justify-between border-b border-line px-3">
@@ -194,7 +215,7 @@ function Sheet({
   }
 
   return (
-    <div className="absolute inset-0 z-[1200] flex justify-end">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} className="absolute inset-0 z-[1200] flex justify-end">
       <button type="button" className="min-w-10 flex-1 bg-ink/15" aria-label="Close pane" onClick={onClose} />
       <aside className="pane-sheet-right flex h-full w-[min(22rem,82vw)] flex-col border-l border-line bg-card shadow-[0_0_40px_rgba(27,23,18,0.12)]">
         <div className="flex h-10 shrink-0 items-center justify-between border-b border-line px-3">
@@ -214,6 +235,17 @@ function Splitter({ ratio, onRatio }: { ratio: number; onRatio: (n: number) => v
     <div
       role="separator"
       aria-orientation="horizontal"
+      aria-label="Map height"
+      tabIndex={0}
+      aria-valuemin={24}
+      aria-valuemax={68}
+      aria-valuenow={Math.round(ratio * 100)}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          onRatio(Math.min(.68, Math.max(.24, ratio + (e.key === "ArrowUp" ? .04 : -.04))));
+        }
+      }}
       onPointerDown={(e) => {
         e.preventDefault();
         const start = e.clientY;
@@ -229,7 +261,7 @@ function Splitter({ ratio, onRatio }: { ratio: number; onRatio: (n: number) => v
         window.addEventListener("pointermove", onMove);
         window.addEventListener("pointerup", onUp);
       }}
-      className="flex h-3 shrink-0 cursor-row-resize items-center justify-center border-y border-line bg-paper-2"
+      className="flex h-3 shrink-0 cursor-row-resize touch-none items-center justify-center border-y border-line bg-paper-2"
     >
       <div className="h-1 w-10 rounded-full bg-line" />
     </div>

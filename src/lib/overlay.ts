@@ -54,5 +54,5 @@ export function writeOverlay(data: {
     extras: mergeById(prev?.extras, extrasFrom(data)),
     threads: mergeById(prev?.threads, data.threads).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 40),
   };
-  localStorage.setItem(KEY, JSON.stringify(next));
+  try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* Storage can be full or disabled; current session still works. */ }
 }
