@@ -837,8 +837,8 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 2px 0 14px 40px;
-  max-width: 560px;
+  padding: 2px 0 12px;
+  max-width: 100%;
 }
 .reply-chips button {
   border: 1px solid #e7dcf4;
@@ -1419,7 +1419,6 @@ body {
     line-height: 1.75;
   }
   .reply-options,
-  .reply-chips,
   .feedback-bar,
   .typing-indicator {
     margin-left: 38px;

@@ -910,23 +910,6 @@ export function GuestApp() {
               })}
             </div>
           ) : null}
-          {!pending && replyChips.length ? (
-            <div
-              className="reply-chips"
-              aria-label={ko ? "다음에 보낼 답" : "Suggested replies"}
-            >
-              {replyChips.map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  disabled={pending}
-                  onClick={() => void send(chip)}
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-          ) : null}
           {!pending && lastReply ? (
             <div className="feedback-bar">
               <span>
@@ -964,7 +947,23 @@ export function GuestApp() {
           ) : null}
         </div>
         <div className="reply-dock">
-          {replyChips.length ? null : (
+          {!pending && replyChips.length ? (
+            <div
+              className="reply-chips"
+              aria-label={ko ? "다음에 보낼 답" : "Suggested replies"}
+            >
+              {replyChips.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => void send(chip)}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          ) : !replyChips.length ? (
             <div className="quick-replies">
               {promptsFor(character, lang).map((prompt) => (
                 <button
@@ -977,7 +976,7 @@ export function GuestApp() {
                 </button>
               ))}
             </div>
-          )}
+          ) : null}
           {error ? (
             <div className="chat-error" role="alert">
               {error}
