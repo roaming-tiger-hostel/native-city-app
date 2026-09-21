@@ -49,3 +49,11 @@ test("DashScope and OpenRouter Qwen model IDs remain supported", () => {
     assert.equal(getLlmConfig().model, model);
   }
 });
+
+test("Ollama dummy key and Qwen model tags are accepted locally", () => {
+  const status = setLlmApiKey("ollama", { baseUrl: "http://127.0.0.1:11434/v1", model: "qwen3.8:27b-mlx" });
+  assert.equal(status.provider, "ollama");
+  assert.equal(getLlmConfig().model, "qwen3.8:27b-mlx");
+  assert.equal(getLlmConfig().key, "ollama");
+  assert.ok(setLlmApiKey("ollama", { baseUrl: "https://example.com/v1", model: "qwen3.5:4b" }).error);
+});

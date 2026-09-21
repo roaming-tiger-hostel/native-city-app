@@ -125,3 +125,17 @@ test("place hydration never merges unrelated places just because latitude matche
   assert.equal(merged.length, 2);
   assert.equal(merged.find((p) => p.id === seed.id).lng, seed.lng);
 });
+
+test("vegetarian preset filters unverified food and keeps independent taste weights", () => {
+  const rina = CHARACTERS.find((c) => c.id === "rina");
+  assert.equal(rina.vegetarian, true);
+  const result = runEngine({ characterId: "rina", guest: { ...guest, porkFree: false }, message: "채식 점심 추천해 줘" });
+  assert.ok(result.placeIds.length);
+  for (const id of result.placeIds) assert.equal(PLACES.find((p) => p.id === id).vegetarianFriendly, true);
+});
+
+test("small talk does not turn food or music preferences into a place search", async () => {
+  const { isSocialMessage } = await import("../src/lib/engine.ts");
+  for (const text of ["어떤 음식 좋아해?", "요즘 어떤 음악 좋아해?", "그냥 수다 떨고 싶어", "I like Korean food", "How are you?"]) assert.equal(isSocialMessage(text), true, text);
+  for (const text of ["채식 점심 추천해 줘", "다른 곳은?", "closer please", "A quiet sunset walk", "Where can I eat?"]) assert.equal(isSocialMessage(text), false, text);
+});

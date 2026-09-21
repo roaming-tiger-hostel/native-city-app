@@ -178,6 +178,24 @@ export function classifyIntent(message: string): Intent {
   return "any";
 }
 
+// A chat turn must not inherit a previous recommendation merely because it has no place keyword.
+export function isSocialMessage(message: string): boolean {
+  if (/(추천|어디|갈 곳|찾아|맛집|식당|코스|다른 곳|다른 데|where|recommend|restaurant|place to|somewhere|another place|lunch|dinner|breakfast|배고|밥 먹|점심|저녁 먹)/i.test(message)) return false;
+  if (/(안녕|반가|고마|감사|기분|외로|심심|수다|이야기|얘기|취향|좋아하|좋아해|최애|음악|노래|플레이리스트|너는|넌 |어땠|hello|^hi\b|hey|thank|feel|lonely|bored|chat|talk|favorite|favourite|music|song|playlist|how are|how was|i like|i love)/i.test(message)) return true;
+  return classifyIntent(message) === "any" && !/(가자|가고|골라|선택|가까|싼|저렴|비싸|멀어|다른|대신|거기|그곳|첫 번째|두 번째|세 번째|other|closer|cheaper|choose|pick|that one|first|second|third)/i.test(message);
+}
+
+export function socialReply(character: Character): EngineResult {
+  const replies: Record<string, Localized> = {
+    maya: { ko: "난 마야야 :) 낯선 도시에서는 편하게 마음 놓는 시간이 좋더라. 오늘 너는 어떤 기분이야?", en: "I’m Maya :) A little comfort matters in a new city. How are you feeling today?" },
+    tom: { ko: "톰이야! 돈 안 드는 수다라면 언제든 환영이지. 오늘 작게라도 좋았던 일 있어?", en: "Tom here! A chat costs nothing, so I’m always up for one. Any little win today?" },
+    yuki: { ko: "유키야. 새로운 것에 익숙해지는 건 천천히 해도 괜찮아. 요즘 새로 좋아하게 된 게 있어?", en: "I’m Yuki. It’s okay to take your time with new things. Anything you’ve started enjoying lately?" },
+    sori: { ko: "소리야. 취향에는 정답이 없지. 너는 어떤 맛을 좋아해?", en: "Sori here. There’s no right answer when it comes to taste. What flavors do you enjoy?" },
+    dal: { ko: "달이야. 서두르지 말고 잠깐 쉬어 가자. 오늘 마음에 남은 장면이 있어?", en: "I’m Dal. Let’s slow down for a moment. What little scene stayed with you today?" },
+  };
+  return { text: replies[character.id] ?? character.lines.greeting, placeIds: [], sources: [], usedLiveKto: false };
+}
+
 function sourcesFor(places: Place[], usedLiveKto: boolean): SourceBadge[] {
   const badges: SourceBadge[] = [];
   if (places.some((p) => p.sources.includes("kto"))) {

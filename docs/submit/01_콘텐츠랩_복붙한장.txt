@@ -1,0 +1,31 @@
+[콘텐츠랩 폼 복붙 한 장 — Native City]
+마감: 2026-09-21 16:00 KST
+
+■ 팀 정보
+팀명: Tiger Uppercut  (변경 불가 — 최초 접수 고정)
+팀 구성: 대표 이응진(개발) / 팀원 남연주(기획)
+※ 메모: 예비심사 제안서 당시 서비스명은 「Tiger Concierge」였음. 지금 앱·기능설명서는 「Native City」.
+  → 콘텐츠랩 접수확인 화면의 등록 서비스명이 Concierge로 남아 있으면 불일치 — Tyro가 화면 보고 맞출 것(이름 변경 가능 여부·운영국 문의).
+
+■ 서비스 정보
+서비스명: Native City
+서비스 개요: 서울 여행자가 문화·식사 제약·취향에 맞는 AI 친구와 대화하며, 한국관광공사 TourAPI 장소를 근거로 추천받는 웹 서비스.
+서비스 유형: 웹
+지역 특화 서비스 유무: 아니오 (서울 데모 / 공고상 지역특화=서울제외 → 해당없음)
+
+■ 서비스 테스트 정보
+서비스 URL: https://native-city.vercel.app
+게스트: https://native-city.vercel.app/guest
+호스트: https://native-city.vercel.app/studio
+심사안내: https://native-city.vercel.app/submit
+테스트 계정 유형: 로그인 불필요 (계정 불필요)
+
+■ 한국관광공사 OpenAPI 활용 정보
+활용 OpenAPI:
+- KorService2 locationBasedList2 / searchKeyword2 / detailCommon2
+- EngService2 locationBasedList2 (병행)
+인증키(인코딩·디코딩): Tyro가 data.go.kr 마이페이지에서 폼에만 직접 입력(채팅 금지)
+운영계정: 개발계정만이면 아니오/해당없음 가능
+
+■ 기능설명서
+PDF: docs/submit/NativeCity_기능설명서_제출용.pdf

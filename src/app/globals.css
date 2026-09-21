@@ -131,8 +131,9 @@ body {
   border-radius: 99px;
 }
 
-/* Guest app: isolated from the host studio palette. */
+/* Shared companion app palette. */
 .city-home,
+.city-studio,
 .city-chat {
   --paper: #fcfbff;
   --card: #fff;
@@ -1479,4 +1480,39 @@ body {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Studio shares the guest app’s palette, portraits and touch targets. */
+.city-studio .display { font-family: inherit; font-weight: 700; }
+.city-studio button, .city-studio summary { cursor: pointer; }
+.city-studio :focus-visible { outline: 3px solid #9976ee; outline-offset: 3px; }
+.studio-header { background: var(--card); border-bottom: 1px solid var(--line); }
+.studio-topbar { min-height: 68px; display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; gap: 12px; }
+.studio-brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; }
+.studio-brand svg { color: var(--accent); }
+.studio-brand span { font-size: 10px; color: var(--ink-soft); letter-spacing: .12em; }
+.studio-guest-link, .studio-profile-link { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 13px; font-weight: 600; }
+.studio-tabs { display: flex; gap: 8px; padding: 0 20px 12px; }
+.studio-tabs button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px; border-radius: 14px; color: var(--ink-soft); font-size: 14px; }
+.studio-tabs button[aria-pressed="true"] { background: var(--paper-2); color: var(--accent); font-weight: 700; }
+.studio-friend-picker { display: flex; overflow-x: auto; gap: 8px; padding: 10px 20px; border-top: 1px solid var(--line); }
+.studio-friend-picker button { display: flex; align-items: center; flex-shrink: 0; gap: 8px; padding: 5px 12px 5px 5px; border: 1px solid transparent; border-radius: 30px; font-size: 13px; }
+.studio-friend-picker button[aria-pressed="true"] { border-color: var(--accent); background: var(--paper-2); }
+.studio-profile { display: flex; align-items: center; gap: 24px; margin-top: 16px; }
+.studio-profile > .character-avatar { width: 160px; height: 200px; flex-shrink: 0; border-radius: 24px; }
+.studio-profile-link { margin-top: 20px; background: var(--paper-2); padding: 12px 18px; border-radius: 14px; }
+.studio-connections summary { padding: 12px 0; color: var(--ink-soft); font-size: 13px; }
+.studio-connections form + form { margin-top: 12px; }
+.friend-preset-label { font-size: 11px; color: #7854df; margin-top: 8px; }
+.preset-filters { flex-wrap: wrap; padding-top: 0; }
+@media (max-width: 600px) {
+  .studio-topbar { padding: 12px 16px; }
+  .studio-brand { font-size: 17px; flex-wrap: wrap; }
+  .studio-brand span { display: none; }
+  .studio-tabs { gap: 2px; padding: 0 8px 8px; }
+  .studio-tabs button { flex: 1; padding: 10px 6px; font-size: 12px; gap: 5px; }
+  .studio-friend-picker { padding: 8px 12px; }
+  .studio-profile { gap: 16px; align-items: flex-start; }
+  .studio-profile > .character-avatar { width: 108px; height: 150px; border-radius: 18px; }
+  .studio-profile-link { padding: 10px 12px; }
 }

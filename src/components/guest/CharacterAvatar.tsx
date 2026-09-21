@@ -11,7 +11,8 @@ export function CharacterAvatar({
   size?: number;
   portrait?: boolean;
 }) {
-  const index = portraitIds.indexOf(character.id);
+  const index = portraitIds.indexOf(character.portraitId ?? character.id);
+  const extraPortrait = ["rina", "hana"].includes(character.id);
   return (
     <span
       aria-hidden="true"
@@ -19,6 +20,7 @@ export function CharacterAvatar({
       style={{
         ...(portrait ? {} : { width: size, height: size }),
         backgroundColor: character.color,
+        ...(extraPortrait ? { backgroundImage: `url('/characters/${character.id}.svg')`, backgroundSize: "cover", backgroundPosition: "center" } : {}),
         ...(index >= 0
           ? {
               backgroundImage: "url('/characters/seoul-friends.webp')",
@@ -27,7 +29,7 @@ export function CharacterAvatar({
           : {}),
       }}
     >
-      {index < 0 ? character.name.ko.slice(0, 1) : null}
+      {index < 0 && !extraPortrait ? character.name.ko.slice(0, 1) : null}
     </span>
   );
 }

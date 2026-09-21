@@ -148,53 +148,60 @@ async function tourGet(
   url.searchParams.set("_type", "json");
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
-  const res = await fetch(url.toString(), { cache: "no-store" });
-  if (!res.ok) {
-    const error = describeHttpError(family, res.status);
-    if (res.status === 403) unavailable[family] = error;
+  try {
+    const res = await fetch(url.toString(), { cache: "no-store", signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) {
+      const error = describeHttpError(family, res.status);
+      if (res.status === 403) unavailable[family] = error;
+      recordTourCall({
+        at: new Date().toISOString(),
+        service,
+        path,
+        params,
+        ok: false,
+        error,
+      });
+      return { ok: false, error };
+    }
+
+    const json = (await res.json()) as {
+      response?: {
+        header?: { resultCode?: string; resultMsg?: string };
+        body?: { items?: { item?: TourItem | TourItem[] }; totalCount?: number };
+      };
+      OpenAPI_ServiceResponse?: { cmmMsgHeader?: { errMsg?: string; returnAuthMsg?: string } };
+    };
+
+    const platform = json.OpenAPI_ServiceResponse?.cmmMsgHeader;
+    if (platform) {
+      const error = platform.returnAuthMsg || platform.errMsg || "OpenAPI platform error";
+      recordTourCall({ at: new Date().toISOString(), service, path, params, ok: false, error });
+      return { ok: false, error };
+    }
+
+    const code = json.response?.header?.resultCode;
+    if (code && code !== "0000") {
+      const error = json.response?.header?.resultMsg || code;
+      recordTourCall({ at: new Date().toISOString(), service, path, params, ok: false, error });
+      return { ok: false, error };
+    }
+
+    const items = asArray(json.response?.body?.items?.item);
     recordTourCall({
       at: new Date().toISOString(),
       service,
       path,
       params,
-      ok: false,
-      error,
+      ok: true,
+      count: items.length,
     });
-    return { ok: false, error };
-  }
-
-  const json = (await res.json()) as {
-    response?: {
-      header?: { resultCode?: string; resultMsg?: string };
-      body?: { items?: { item?: TourItem | TourItem[] }; totalCount?: number };
-    };
-    OpenAPI_ServiceResponse?: { cmmMsgHeader?: { errMsg?: string; returnAuthMsg?: string } };
-  };
-
-  const platform = json.OpenAPI_ServiceResponse?.cmmMsgHeader;
-  if (platform) {
-    const error = platform.returnAuthMsg || platform.errMsg || "OpenAPI platform error";
+    return { ok: true, items, raw: json };
+  } catch {
+    // Never log the fetch error: it can contain the URL and serviceKey.
+    const error = "TourAPI network, timeout or response error";
     recordTourCall({ at: new Date().toISOString(), service, path, params, ok: false, error });
     return { ok: false, error };
   }
-
-  const code = json.response?.header?.resultCode;
-  if (code && code !== "0000") {
-    const error = json.response?.header?.resultMsg || code;
-    recordTourCall({ at: new Date().toISOString(), service, path, params, ok: false, error });
-    return { ok: false, error };
-  }
-
-  const items = asArray(json.response?.body?.items?.item);
-  recordTourCall({
-    at: new Date().toISOString(),
-    service,
-    path,
-    params,
-    ok: true,
-    count: items.length,
-  });
-  return { ok: true, items, raw: json };
 }
 
 export async function locationBasedList(opts: {
@@ -265,32 +272,12 @@ export async function searchKeyword(keyword: string, lang: "ko" | "en" = "ko") {
 }
 
 export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: TourStatus }> {
-  const eng = await locationBasedList({
-    lat: 37.5639,
-    lng: 127.0296,
-    radius: 4000,
-    lang: "en",
-  });
-  const jpn = await locationBasedList({
-    lat: 37.5639,
-    lng: 127.0296,
-    radius: 4000,
-    lang: "ja",
-  });
-  const food = await locationBasedList({
-    lat: 37.5639,
-    lng: 127.0296,
-    radius: 4000,
-    contentTypeId: "39",
-    lang: "ko",
-  });
-  const spots = await locationBasedList({
-    lat: 37.5639,
-    lng: 127.0296,
-    radius: 4000,
-    contentTypeId: "12",
-    lang: "ko",
-  });
+  const [eng, jpn, food, spots] = await Promise.all([
+    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 4000, lang: "en" }),
+    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 4000, lang: "ja" }),
+    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 4000, contentTypeId: "39", lang: "ko" }),
+    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 4000, contentTypeId: "12", lang: "ko" }),
+  ]);
 
   const byId = new Map<string, Place>();
   for (const p of [...food.places, ...spots.places]) byId.set(p.contentId ?? p.id, p);

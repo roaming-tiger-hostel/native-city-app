@@ -65,6 +65,7 @@ export type Character = {
   bio: Localized;
   voice: Localized;
   color: string;
+  portraitId?: string;
   trainedBy: Localized;
   trainerNote: Localized;
   coverage: Localized;

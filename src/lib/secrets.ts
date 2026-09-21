@@ -98,7 +98,15 @@ function upsertEnv(name: string, value: string) {
   writePrivate(ENV_LOCAL, text.startsWith("\n") ? text.slice(1) : text);
 }
 
+export function isLocalLlm(baseUrl: string) {
+  try {
+    const url = new URL(baseUrl);
+    return ["http:", "https:"].includes(url.protocol) && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  } catch { return false; }
+}
+
 function inferProvider(key: string, baseUrl: string) {
+  if (isLocalLlm(baseUrl)) return "ollama";
   if (baseUrl.includes("openrouter") || key.startsWith("sk-or-")) return "openrouter";
   if (baseUrl.includes("dashscope") || key.startsWith("sk-")) return "dashscope";
   if (baseUrl) return "openai-compatible";
@@ -106,11 +114,13 @@ function inferProvider(key: string, baseUrl: string) {
 }
 
 function defaultBase(provider: string) {
+  if (provider === "ollama") return "http://127.0.0.1:11434/v1";
   if (provider === "openrouter") return "https://openrouter.ai/api/v1";
   return "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 }
 
 function defaultModel(provider: string) {
+  if (provider === "ollama") return "qwen3.8:27b-mlx";
   if (provider === "openrouter") return "qwen/qwen-2.5-72b-instruct";
   return "qwen-plus";
 }
@@ -170,10 +180,10 @@ export type LlmConfig = {
 };
 
 function storedLlmConfig(): LlmConfig | null {
-  if (BOOT_LLM) {
+  if (BOOT_LLM || (!process.env.VERCEL && isLocalLlm(BOOT_LLM_BASE))) {
     const provider = inferProvider(BOOT_LLM, BOOT_LLM_BASE);
     return {
-      key: BOOT_LLM,
+      key: BOOT_LLM || "ollama",
       baseUrl: (BOOT_LLM_BASE || defaultBase(provider)).replace(/\/$/, ""),
       model: BOOT_LLM_MODEL || defaultModel(provider),
       provider,
@@ -211,6 +221,10 @@ function isQwenModel(model: string) {
 
 export function getLlmConfig(): LlmConfig | null {
   const config = storedLlmConfig();
+  if (process.env.VERCEL && config && isLocalLlm(config.baseUrl)) {
+    const cloudKey = process.env.QWEN_API_KEY?.trim() || process.env.DASHSCOPE_API_KEY?.trim();
+    return cloudKey ? { key: cloudKey, baseUrl: defaultBase("dashscope"), model: "qwen-plus", provider: "dashscope", source: "env" } : null;
+  }
   return config && isQwenModel(config.model) ? config : null;
 }
 
@@ -264,12 +278,15 @@ export function llmKeyStatus(): LlmStatus {
 }
 
 export function setLlmApiKey(raw: string, opts?: { baseUrl?: string; model?: string }): LlmStatus | { error: string } {
-  if (BOOT_LLM) {
+  if (BOOT_LLM || (!process.env.VERCEL && isLocalLlm(BOOT_LLM_BASE))) {
     return { error: "서버 환경변수로 잠겨 있다. Vercel LLM_API_KEY / QWEN_API_KEY에서 바꾼다." };
   }
   const key = normalizeKey(raw);
-  if (key.length < 16) {
+  if (key.length < 16 && !(key === "ollama" && isLocalLlm(opts?.baseUrl ?? ""))) {
     return { error: "키가 너무 짧다. DashScope/OpenRouter/Qwen 키를 그대로 넣는다." };
+  }
+  if (process.env.VERCEL && isLocalLlm(opts?.baseUrl ?? "")) {
+    return { error: "Vercel에서는 로컬 Ollama에 연결할 수 없습니다. DashScope를 사용하세요." };
   }
   if (opts?.model && !isQwenModel(opts.model)) {
     return { error: "Qwen 모델만 사용할 수 있습니다." };
@@ -289,7 +306,7 @@ export function setLlmApiKey(raw: string, opts?: { baseUrl?: string; model?: str
 }
 
 export function clearLlmApiKey(): LlmStatus | { error: string } {
-  if (BOOT_LLM) {
+  if (BOOT_LLM || (!process.env.VERCEL && isLocalLlm(BOOT_LLM_BASE))) {
     return { error: "서버 환경변수로 잠겨 있다." };
   }
   llmMemory = undefined;

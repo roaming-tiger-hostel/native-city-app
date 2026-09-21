@@ -1,6 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { Sparkles, MapPin, Users, MessagesSquare, ArrowUpRight } from "lucide-react";
+import { CharacterAvatar } from "@/components/guest/CharacterAvatar";
+import { presetsFor } from "@/lib/presets";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PaneShell } from "@/components/panes/PaneShell";
@@ -17,7 +20,7 @@ type Tab = "train" | "places" | "characters" | "conversations";
 
 export function StudioApp() {
   const [lang, setLang] = useState<Lang>("ko");
-  const [tab, setTab] = useState<Tab>("train");
+  const [tab, setTab] = useState<Tab>("characters");
   const [characterId, setCharacterId] = useState<CharacterId>("maya");
   const [characters, setCharacters] = useState(CHARACTERS);
   const [places, setPlaces] = useState<Place[]>(PLACES);
@@ -164,7 +167,7 @@ export function StudioApp() {
           className={`mb-1 w-full rounded-md px-2 py-2 text-left ${characterId === c.id ? "bg-paper-2" : "hover:bg-paper-2"}`}
         >
           <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: c.color }} />
+            <CharacterAvatar character={c} size={38} />
             <span className="text-sm font-medium">{c.name[lang]}</span>
           </div>
           <div className="mt-1 text-[11px] text-ink-soft">{c.trainedBy[lang]}</div>
@@ -180,7 +183,7 @@ export function StudioApp() {
           className={`mb-1 w-full rounded-md px-2 py-2 text-left ${characterId === c.id ? "bg-paper-2" : "hover:bg-paper-2"}`}
         >
           <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: c.color }} />
+            <CharacterAvatar character={c} size={38} />
             <span className="text-sm font-medium">{c.name[lang]}</span>
           </div>
           <div className="mt-1 text-[11px] text-ink-soft">{c.short[lang]}</div>
@@ -246,46 +249,39 @@ export function StudioApp() {
     );
 
   return (
+    <div className="city-studio">
     <PaneShell
       deepenOpen={deepenOpen}
       onDeepenToggle={() => setDeepenOpen((v) => !v)}
-      deepenLabel={lang === "ko" ? "심화" : "Deepen"}
+      deepenLabel={lang === "ko" ? "상세 보기" : "Details"}
       history={history}
       historyOpen={historyOpen}
       onHistoryToggle={() => setHistoryOpen((v) => !v)}
-      historyLabel={lang === "ko" ? "이력" : "History"}
+      historyLabel={lang === "ko" ? "친구 관리" : "Friends"}
       evidenceRatio={mapRatio}
       onEvidenceRatio={setMapRatio}
       header={
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
-          <Link href="/" className="display shrink-0 text-lg">
-            Native City
-          </Link>
-          <span className="hidden shrink-0 text-[11px] tracking-wide text-ink-soft uppercase sm:inline">Studio</span>
-          <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto text-sm">
-            {(["train", "places", "characters", "conversations"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`shrink-0 rounded-md px-3 py-1 ${tab === t ? "bg-paper-2 font-medium" : "hover:bg-paper-2"}`}
-              >
-                {label(t, lang)}
-              </button>
-            ))}
+        <header className="studio-header">
+          <div className="studio-topbar">
+            <Link href="/guest" className="studio-brand"><Sparkles size={23} /> Native City <span>STUDIO</span></Link>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setLang((l) => l === "ko" ? "en" : "ko")} aria-label={lang === "ko" ? "Switch to English" : "한국어로 전환"}>{lang.toUpperCase()}</button>
+              <Link href="/guest" className="studio-guest-link">{lang === "ko" ? "대화하러 가기" : "Open chat"}<ArrowUpRight size={15} /></Link>
+            </div>
+          </div>
+          <nav className="studio-tabs" aria-label={lang === "ko" ? "스튜디오 메뉴" : "Studio tabs"}>
+            {(["characters", "train", "places", "conversations"] as Tab[]).map((t, i) => {
+              const Icon = [Users, Sparkles, MapPin, MessagesSquare][i];
+              return <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}><Icon size={17} />{label(t, lang)}</button>;
+            })}
           </nav>
-          <button
-            onClick={() => setLang((l) => (l === "ko" ? "en" : "ko"))}
-            className="shrink-0 rounded-md border border-line px-2 py-1 text-xs"
-          >
-            {lang.toUpperCase()}
-          </button>
-          <Link href="/guest" className="shrink-0 text-xs text-ink-soft hover:text-ink">
-            Guest
-          </Link>
+          <div className="studio-friend-picker">
+            {characters.map((c) => <button key={c.id} onClick={() => setCharacterId(c.id)} aria-pressed={characterId === c.id}><CharacterAvatar character={c} size={36} /><span>{c.name[lang]}</span></button>)}
+          </div>
         </header>
       }
       action={<div className="flex min-h-0 flex-1 flex-col overflow-hidden">{action}</div>}
-      evidence={
+      evidence={tab === "places" ? (
         <>
           <MapCanvas
             lang={lang}
@@ -301,17 +297,18 @@ export function StudioApp() {
             {HOSTEL.name[lang]} · {lang === "ko" ? "근거 · 지도" : "evidence · map"}
           </div>
         </>
-      }
+      ) : undefined}
       deepen={<div className="flex h-full min-h-0 flex-col overflow-y-auto p-4">{deepen}</div>}
     />
+    </div>
   );
 }
 
 function label(tab: Tab, lang: Lang) {
   const map = {
-    train: { ko: "훈련", en: "Train" },
+    train: { ko: "취향 더하기", en: "Taste" },
     places: { ko: "장소", en: "Places" },
-    characters: { ko: "캐릭터", en: "Characters" },
+    characters: { ko: "내 친구", en: "Friends" },
     conversations: { ko: "대화", en: "Threads" },
   };
   return map[tab][lang];
@@ -359,11 +356,11 @@ function TrainAction({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 border-b border-line px-4 py-2">
-        <div className="display text-xl sm:text-2xl">{lang === "ko" ? "판정 하네스" : "Judgment harness"}</div>
+        <div className="display text-xl sm:text-2xl">{lang === "ko" ? "어느 쪽이 더 좋아?" : "Which one feels right?"}</div>
         <p className="mt-0.5 text-xs text-ink-soft">
           {lang === "ko"
-            ? `${character.name.ko} · 말투가 아니라 어디가 이기는지.`
-            : `${character.name.en} · not voice — which place wins.`}
+            ? `${character.name.ko}에게 알려줄 장소를 골라 줘.`
+            : `Choose a place to shape ${character.name.en}’s taste.`}
         </p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -499,13 +496,13 @@ function PlaceAction({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-end justify-between gap-3 border-b border-line px-4 py-2">
         <div>
-          <div className="display text-xl sm:text-2xl">{lang === "ko" ? "장소 · 사실 레이어" : "Places · fact layer"}</div>
+          <div className="display text-xl sm:text-2xl">{lang === "ko" ? "동네 장소" : "Neighborhood places"}</div>
           <p className="mt-0.5 text-xs text-ink-soft">
             {status?.live
               ? `${status.endpoint} · ${status.count ?? places.length}`
               : lang === "ko"
-                ? "키가 없으면 시드 캐시. 취향은 이 레이어가 덮지 못한다."
-                : "Seed cache without a key. Facts never overwrite taste."}
+                ? "데모 장소를 둘러보거나 TourAPI로 새로고침하세요."
+                : "Browse demo places or refresh with TourAPI."}
           </p>
         </div>
         <button onClick={onSync} className="shrink-0 rounded-md bg-ink px-3 py-2 text-sm text-card">
@@ -513,10 +510,9 @@ function PlaceAction({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <TourKeyForm lang={lang} onSaved={onSync} />
-        <div className="mt-3">
-          <LlmKeyForm lang={lang} />
-        </div>
+        <details className="studio-connections"><summary>{lang === "ko" ? "연결 설정 · TourAPI / Qwen" : "Connections · TourAPI / Qwen"}</summary>
+          <TourKeyForm lang={lang} onSaved={onSync} /><LlmKeyForm lang={lang} />
+        </details>
         <form
           className="mt-3 flex gap-2"
           onSubmit={(e) => {
@@ -634,7 +630,14 @@ function CharacterAction({
             ? "사업자 기본 캐릭터"
             : "Operator house character"}
       </p>
-      <h1 className="display mt-1 text-3xl">{character.name[lang]}</h1>
+      <div className="studio-profile">
+        <CharacterAvatar character={character} portrait />
+        <div><h1 className="display mt-1 text-3xl">{character.name[lang]} <span className="text-sm text-accent">AI</span></h1>
+          <p className="mt-2 text-sm text-ink-soft">{presetsFor(character.id).map((p) => p.label[lang]).join(" · ")}</p>
+          <p className="mt-3 text-sm">{lang === "ko" ? "지금 바로 대화할 수 있어요. 취향 학습은 선택이에요." : "Ready to chat. Taste training is optional."}</p>
+          <Link className="studio-profile-link" href="/guest">{lang === "ko" ? "친구와 대화하기" : "Chat with a friend"}<ArrowUpRight size={16} /></Link>
+        </div>
+      </div>
       <p className="mt-3 text-sm leading-relaxed">{character.bio[lang]}</p>
       <p className="mt-2 text-sm text-ink-soft">{character.coverage[lang]}</p>
       <p className="mt-3 text-sm">
@@ -1045,8 +1048,8 @@ function LlmKeyForm({ lang }: { lang: Lang }) {
       </div>
       <p className="text-xs leading-relaxed text-ink-soft">
         {lang === "ko"
-          ? "DashScope(sk-) 또는 OpenRouter(sk-or-) 키. OpenAI 호환 /chat/completions. 기본 모델 qwen-plus. Vercel이면 LLM_API_KEY / QWEN_API_KEY 환경변수. git·채팅에 넣지 말 것."
-          : "DashScope (sk-) or OpenRouter (sk-or-) key. OpenAI-compatible /chat/completions. Default model qwen-plus. On Vercel use LLM_API_KEY / QWEN_API_KEY. Never in git or chat."}
+          ? "로컬은 Ollama, 배포는 DashScope. 로컬 .env.local에 LLM_BASE_URL과 LLM_MODEL을 설정할 수 있어요. 배포 키는 Vercel QWEN_API_KEY에 저장하세요."
+          : "Local: Ollama via LLM_BASE_URL and LLM_MODEL in .env.local. Deployment: DashScope via Vercel QWEN_API_KEY."}
       </p>
       {status?.locked ? (
         <p className="text-xs text-seed">

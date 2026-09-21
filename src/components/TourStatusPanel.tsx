@@ -26,8 +26,8 @@ export async function TourStatusPanel() {
       </p>
       <ul className="text-xs text-ink-soft">
         <li>KorService2: locationBasedList2, searchKeyword2, detailCommon2</li>
-        <li>EngService2 / JpnService2: 이 키는 미신청. KorService2만 0000이면 데이터 활용은 충족.</li>
-        <li>Facts (hours, coords, closed) may override. Taste never does.</li>
+        <li>EngService2 / JpnService2: 별도 활용 신청 상태에 따라 실패할 수 있습니다. 아래 실제 호출 로그를 확인하세요.</li>
+        <li>주소·좌표·개요·연락처를 보강합니다. 실시간 영업·폐점·식이 인증은 보장하지 않습니다.</li>
       </ul>
       {shown.length ? (
         <ul className="font-mono text-xs text-ink-soft">
@@ -39,7 +39,7 @@ export async function TourStatusPanel() {
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-ink-soft">이 페이지를 열면 locationBasedList2 호출이 여기에 남는다.</p>
+        <p className="text-xs text-ink-soft">인증키가 설정된 상태에서 이 페이지를 열면 locationBasedList2 호출을 시도합니다.</p>
       )}
     </div>
   );
