@@ -68,6 +68,11 @@ function detectIntents(message: string, engineIntent?: Intent): GoldenIntent[] {
     return ["greeting"];
   }
   if (!found.length) return [];
+  // Specific intents must not compete with generic "food" (추천/먹 also matches food).
+  const specific = ["cafe", "walk", "night", "rain", "halal", "vegetarian", "kcontent", "safety"] as const;
+  if (found.some((intent) => (specific as readonly string[]).includes(intent))) {
+    return found.filter((intent) => intent !== "food");
+  }
   return found;
 }
 
