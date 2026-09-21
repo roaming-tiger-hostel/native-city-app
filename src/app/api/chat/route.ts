@@ -294,36 +294,50 @@ export async function POST(req: Request) {
         .map((id) => places.find((p) => p.id === id))
         .filter((p): p is Place => Boolean(p))
         .filter((p) => !excludePlaceIds.includes(p.id));
-      // Prefer live TourAPI / engine candidates; golden hints are soft, not exclusive.
-      const liveFirst = rankingPlaces
+      const wantsCafe = /(카페|커피|디저트|cafe|coffee)/i.test(body.message ?? "");
+      const matchIntent = (p: Place) => {
+        if (wantsCafe) {
+          return (
+            p.tags.some((t) => ["cafe", "coffee", "dessert"].includes(t)) ||
+            ["culture"].includes(p.kind)
+          );
+        }
+        if (intent === "walk") return p.kind === "walk" || p.tags.includes("walk");
+        if (intent === "night")
+          return p.kind === "night" || Boolean(p.openLate) || p.tags.includes("night");
+        if (intent === "rain")
+          return (
+            p.tags.includes("rain") ||
+            p.tags.includes("indoor") ||
+            p.kind === "culture" ||
+            p.kind === "market"
+          );
+        // food / default meal asks
+        return p.kind === "food" || p.kind === "market" || p.tags.includes("food");
+      };
+      const livePad = rankingPlaces
         .filter((p) => !excludePlaceIds.includes(p.id))
         .filter((p) => p.id.startsWith("kto-") || p.sources.includes("kto"))
-        .slice(0, 6);
-      const engineFirst = result.placeIds
+        .filter(matchIntent);
+      const enginePad = result.placeIds
         .map((id) => places.find((p) => p.id === id))
         .filter((p): p is Place => Boolean(p))
-        .filter((p) => !excludePlaceIds.includes(p.id));
-      const kindHint =
-        intent === "walk"
-          ? ["walk", "culture"]
-          : intent === "night"
-            ? ["night", "food", "culture"]
-            : intent === "rain"
-              ? ["culture", "market", "food"]
-              : ["food", "market", "culture"];
-      const catalogPool = rankingPlaces
         .filter((p) => !excludePlaceIds.includes(p.id))
-        .filter((p) => kindHint.includes(p.kind) || p.tags.some((t) => ["cafe", "coffee", "night", "walk"].includes(t)));
+        .filter(matchIntent);
+      const catalogPad = rankingPlaces
+        .filter((p) => !excludePlaceIds.includes(p.id))
+        .filter(matchIntent);
       const mixed: Place[] = [];
       const push = (p?: Place | null) => {
         if (!p) return;
         if (mixed.some((x) => x.id === p.id)) return;
         mixed.push(p);
       };
-      for (const p of liveFirst) push(p);
-      for (const p of engineFirst) push(p);
+      // Hint first (matches golden copy), then TourAPI, then engine, then catalog.
       for (const p of hinted) push(p);
-      for (const p of catalogPool) push(p);
+      for (const p of livePad) push(p);
+      for (const p of enginePad) push(p);
+      for (const p of catalogPad) push(p);
       const chosen = mixed.slice(0, 3);
       if (chosen.length) {
         result = {
