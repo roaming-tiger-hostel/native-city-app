@@ -189,9 +189,16 @@ export async function POST(req: Request) {
     ? []
     : Array.from(
         new Set(
-          recentCharacter.flatMap((m) => m.placeIds ?? []).filter(Boolean),
+          [
+            ...recentCharacter.flatMap((m) => m.placeIds ?? []),
+            ...(previous?.placeIds ?? []),
+            ...(previous?.recommendationIds ?? []),
+          ].filter(Boolean),
         ),
       );
+  const excludeCardIds = Array.from(
+    new Set(recentCharacter.map((m) => m.cardId).filter((id): id is string => Boolean(id))),
+  );
   // Keep distance/ranking weights; only drop recently shown IDs from the candidate pool.
   const rankingPlaces = body.selectedPlaceId
     ? places.filter((p) => p.id === body.selectedPlaceId)
@@ -275,6 +282,7 @@ export async function POST(req: Request) {
         engineIntent: intent,
         historyLen: history.length,
         excludePlaceIds,
+        excludeCardIds,
       })
     : null;
   if (jev && jev.score >= 6) {
@@ -286,17 +294,48 @@ export async function POST(req: Request) {
         .map((id) => places.find((p) => p.id === id))
         .filter((p): p is Place => Boolean(p))
         .filter((p) => !excludePlaceIds.includes(p.id));
-      if (hinted.length) {
+      // Prefer live TourAPI / engine candidates; golden hints are soft, not exclusive.
+      const liveFirst = rankingPlaces
+        .filter((p) => !excludePlaceIds.includes(p.id))
+        .filter((p) => p.id.startsWith("kto-") || p.sources.includes("kto"))
+        .slice(0, 6);
+      const engineFirst = result.placeIds
+        .map((id) => places.find((p) => p.id === id))
+        .filter((p): p is Place => Boolean(p))
+        .filter((p) => !excludePlaceIds.includes(p.id));
+      const kindHint =
+        intent === "walk"
+          ? ["walk", "culture"]
+          : intent === "night"
+            ? ["night", "food", "culture"]
+            : intent === "rain"
+              ? ["culture", "market", "food"]
+              : ["food", "market", "culture"];
+      const catalogPool = rankingPlaces
+        .filter((p) => !excludePlaceIds.includes(p.id))
+        .filter((p) => kindHint.includes(p.kind) || p.tags.some((t) => ["cafe", "coffee", "night", "walk"].includes(t)));
+      const mixed: Place[] = [];
+      const push = (p?: Place | null) => {
+        if (!p) return;
+        if (mixed.some((x) => x.id === p.id)) return;
+        mixed.push(p);
+      };
+      for (const p of liveFirst) push(p);
+      for (const p of engineFirst) push(p);
+      for (const p of hinted) push(p);
+      for (const p of catalogPool) push(p);
+      const chosen = mixed.slice(0, 3);
+      if (chosen.length) {
         result = {
           ...result,
-          placeIds: hinted.map((p) => p.id),
-          contextPlaceId: hinted[0]?.id,
+          placeIds: chosen.map((p) => p.id),
+          contextPlaceId: chosen[0]?.id,
           decision: {
             prompt: {
-              ko: "이 카드가 고른 후보야. 칩으로 고르거나 다른 조건을 말해 줘.",
-              en: "Candidates from this answer card. Tap a chip or change the constraint.",
+              ko: "후보를 골라 봐. 칩으로 고르거나 다른 조건을 말해 줘.",
+              en: "Pick a candidate. Tap a chip or change the constraint.",
             },
-            options: hinted.slice(0, 3).map((p) => ({
+            options: chosen.map((p) => ({
               placeId: p.id,
               why: {
                 ko: p.note.ko,
@@ -379,6 +418,7 @@ export async function POST(req: Request) {
     sources: result.sources,
     createdAt: new Date().toISOString(),
     replyChips,
+    ...(jevCardId ? { cardId: jevCardId } : {}),
   };
 
   const userTurn: ChatMessage = {

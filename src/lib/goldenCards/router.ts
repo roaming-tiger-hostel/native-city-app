@@ -139,7 +139,7 @@ export function pickGoldenCard(input: JevPickInput): JevPickResult | null {
     return null;
   }
 
-  let best: JevPickResult | null = null;
+  const scored: JevPickResult[] = [];
   for (const card of GOLDEN_CARDS) {
     const score = scoreCard(card, {
       characterId: input.characterId,
@@ -150,11 +150,20 @@ export function pickGoldenCard(input: JevPickInput): JevPickResult | null {
       excludePlaceIds: input.excludePlaceIds,
     });
     if (score < 8) continue;
-    if (!best || score > best.score) {
-      best = { card, score, reason: intents.join("+") };
-    }
+    scored.push({ card, score, reason: intents.join("+") });
   }
-  return best;
+  if (!scored.length) return null;
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored[0].score;
+  const tied = scored.filter((s) => s.score === top);
+  // Rotate among tied cards so the same placeHint is not sticky across turns.
+  const seed =
+    (input.historyLen ?? 0) * 17 +
+    (input.excludePlaceIds?.length ?? 0) * 3 +
+    message.length +
+    intents.join("").length;
+  const pick = tied[Math.abs(seed) % tied.length];
+  return pick;
 }
 
 export function chipsFromCard(card: GoldenCard, lang: Lang): string[] {

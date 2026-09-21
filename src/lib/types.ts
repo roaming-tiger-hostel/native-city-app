@@ -115,6 +115,7 @@ export type ChatMessage = {
   voice?: "qwen" | "engine" | "golden";
   attribution?: { characterId: string; characterName: string; trainedBy: string };
   replyChips?: string[];
+  cardId?: string;
 };
 
 export type SourceBadge = {
