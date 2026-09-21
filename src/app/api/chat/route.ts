@@ -232,6 +232,16 @@ export async function POST(req: Request) {
   let spoken = result.text[lang];
   let voice: "qwen" | "engine" | "golden" = "engine";
   let jevCardId: string | undefined;
+  const recentCharacter = [...history]
+    .reverse()
+    .filter((m) => m.role === "character")
+    .slice(0, 4);
+  const excludePlaceIds = Array.from(
+    new Set(
+      recentCharacter.flatMap((m) => m.placeIds ?? []).filter(Boolean),
+    ),
+  );
+  // attribution not stored for cardId; use place exclusion + followup miss in router
   const jev = !body.selectedPlaceId
     ? pickGoldenCard({
         message: body.message ?? "",
@@ -240,6 +250,7 @@ export async function POST(req: Request) {
         lang,
         engineIntent: intent,
         historyLen: history.length,
+        excludePlaceIds,
       })
     : null;
   if (jev && jev.score >= 6) {

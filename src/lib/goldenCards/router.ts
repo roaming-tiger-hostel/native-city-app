@@ -23,8 +23,11 @@ const KEYWORD_INTENTS: Array<{ re: RegExp; intent: GoldenIntent }> = [
   { re: /(비|우산|rain)/i, intent: "rain" },
   { re: /(산책|걷|walk|park)/i, intent: "walk" },
   { re: /(밥|먹|맛집|점심|저녁|food|hungry|lunch|dinner|추천)/i, intent: "food" },
-  { re: /(다른|대신|다음|another|else|next)/i, intent: "followup" },
 ];
+
+/** Tyro: "다른 걸로 / else / not these 3" → miss golden, fall through to Qwen/engine. */
+const FORCE_MISS_RE =
+  /(다른\s*걸로|다른\s*거|다른\s*곳|다른\s*추천|이거\s*말고|그건\s*말고|말고\s*다른|대신|바꿔|다시\s*추천|another|something else|different|else|not (these|that|this)| besides)/i;
 
 export type JevPickInput = {
   message: string;
@@ -33,6 +36,8 @@ export type JevPickInput = {
   lang: Lang;
   engineIntent?: Intent;
   historyLen?: number;
+  excludeCardIds?: string[];
+  excludePlaceIds?: string[];
 };
 
 export type JevPickResult = {
@@ -59,7 +64,6 @@ function detectIntents(message: string, engineIntent?: Intent): GoldenIntent[] {
       if (!found.includes(mapped)) found.push(mapped);
     }
   }
-  // no keyword + engineIntent any → miss (LLM/engine), do not force a card
   if (isGreetingMessage(message)) {
     return ["greeting"];
   }
@@ -74,8 +78,17 @@ function scoreCard(
     segmentId?: string;
     intents: GoldenIntent[];
     message: string;
+    excludeCardIds?: string[];
+    excludePlaceIds?: string[];
   },
 ): number {
+  if (opts.excludeCardIds?.includes(card.id)) return -1;
+  if (
+    opts.excludePlaceIds?.length &&
+    card.placeHints?.some((id) => opts.excludePlaceIds!.includes(id))
+  ) {
+    return -1;
+  }
   if (card.characterId !== opts.characterId) return -1;
   const segOk =
     card.segmentIds.includes("*") ||
@@ -85,6 +98,8 @@ function scoreCard(
   const isGreetingCard = card.intents.includes("greeting");
   const wantsGreeting = opts.intents[0] === "greeting";
   if (isGreetingCard !== wantsGreeting) return -1;
+  // followup cards are never auto-picked; those turns miss to LLM
+  if (card.intents.includes("followup")) return -1;
 
   const overlap = opts.intents.filter((intent) => card.intents.includes(intent));
   if (!overlap.length) return -1;
@@ -103,6 +118,9 @@ function scoreCard(
 
 export function pickGoldenCard(input: JevPickInput): JevPickResult | null {
   const message = input.message?.trim() ?? "";
+  // Explicit "something else" → miss so Qwen/engine answers
+  if (FORCE_MISS_RE.test(message)) return null;
+
   const intents = detectIntents(message, input.engineIntent);
   if (!intents.length) return null;
 
@@ -114,7 +132,8 @@ export function pickGoldenCard(input: JevPickInput): JevPickResult | null {
           c.intents.includes("greeting") &&
           (c.segmentIds.includes("*") ||
             !input.segmentId ||
-            c.segmentIds.includes(input.segmentId)),
+            c.segmentIds.includes(input.segmentId)) &&
+          !input.excludeCardIds?.includes(c.id),
       ) ?? null;
     if (greet) return { card: greet, score: 100, reason: "greeting" };
     return null;
@@ -127,6 +146,8 @@ export function pickGoldenCard(input: JevPickInput): JevPickResult | null {
       segmentId: input.segmentId,
       intents,
       message,
+      excludeCardIds: input.excludeCardIds,
+      excludePlaceIds: input.excludePlaceIds,
     });
     if (score < 8) continue;
     if (!best || score > best.score) {
