@@ -1,4 +1,5 @@
-import { getLlmConfig } from "./secrets";
+import { parseChipJson } from "./replyChips";
+import { getLlmConfig, getReplyChipLlmConfig } from "./secrets";
 import type { Character, ChatMessage, EngineResult, Lang, Place } from "./types";
 
 function placeLine(place: Place, lang: Lang) {
@@ -80,4 +81,68 @@ export async function speakWithQwen(opts: {
   const outside = opts.places.filter((p) => !ranked.some((candidate) => candidate.id === p.id));
   if (outside.some((p) => text.includes(p.title.ko) || text.toLowerCase().includes(p.title.en.toLowerCase()))) return null;
   return { text, model: cfg.model, provider: cfg.provider };
+}
+
+export async function suggestReplyChips(opts: {
+  character: Character;
+  lang: Lang;
+  message: string;
+  reply: string;
+  hasDecision: boolean;
+  selectedPlace: boolean;
+  placeTitles: string[];
+}): Promise<string[] | null> {
+  const cfg = getReplyChipLlmConfig();
+  if (!cfg) return null;
+
+  const system = [
+    "You write replyChips: 2-4 short next USER messages for a travel-character chat app.",
+    "These are conversational tap-to-send chips, not place DecisionOption cards.",
+    "Do not name specific venues or copy place titles.",
+    `Write in ${opts.lang === "ko" ? "Korean" : "English"}.`,
+    "Each chip is a first-person guest line, max 18 characters if Korean, max 28 if English.",
+    'Return JSON only: {"chips":["..."]}',
+  ].join("\n");
+
+  const user = [
+    `Character: ${opts.character.name[opts.lang]} (${opts.character.id})`,
+    `Guest said: ${opts.message.slice(0, 400)}`,
+    `Character replied: ${opts.reply.slice(0, 600)}`,
+    opts.hasDecision
+      ? "Place option cards are already on screen. Chips must be follow-ups such as vibe, budget, or closer — never a place name."
+      : "",
+    opts.selectedPlace
+      ? "The guest already picked a place. Chips are logistics follow-ups."
+      : "",
+    opts.placeTitles.length
+      ? `Forbidden place names: ${opts.placeTitles.join(", ")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+    method: "POST",
+    signal: AbortSignal.timeout(8_000),
+    headers: {
+      authorization: `Bearer ${cfg.key}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      temperature: 0.5,
+      max_tokens: 160,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const text = json.choices?.[0]?.message?.content?.trim();
+  if (!text) return null;
+  return parseChipJson(text);
 }

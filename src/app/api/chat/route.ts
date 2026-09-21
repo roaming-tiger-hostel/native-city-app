@@ -1,6 +1,7 @@
 import { PLACES, guestById } from "@/lib/catalog";
 import { classifyIntent, greeting, mergePlaces, runEngine } from "@/lib/engine";
-import { speakWithQwen } from "@/lib/llm";
+import { speakWithQwen, suggestReplyChips } from "@/lib/llm";
+import { fallbackReplyChips, normalizeReplyChips } from "@/lib/replyChips";
 import {
   addThread,
   getRuntime,
@@ -140,10 +141,19 @@ export async function POST(req: Request) {
   }
 
   if (body.greet) {
+    const hello = greeting(character, lang);
+    const replyChips = fallbackReplyChips({
+      character,
+      lang,
+      intent,
+      hasDecision: false,
+      selectedPlace: false,
+    });
     return Response.json({
-      message: greeting(character, lang),
+      message: { ...hello, replyChips },
       result: null,
       status,
+      replyChips,
     });
   }
 
@@ -204,23 +214,39 @@ export async function POST(req: Request) {
   let spoken = result.text[lang];
   let voice: "qwen" | "engine" = "engine";
   let llmMeta: { model?: string; provider?: string } = {};
-  try {
-    const llm = await speakWithQwen({
+  const placeTitles = result.placeIds.flatMap((id) => {
+    const place = places.find((p) => p.id === id);
+    return place ? [place.title.ko, place.title.en] : [];
+  });
+  const chipContext = {
+    character,
+    lang,
+    intent,
+    message: body.message ?? "",
+    reply: result.text[lang],
+    hasDecision: Boolean(result.decision),
+    selectedPlace: Boolean(body.selectedPlaceId),
+    noPlaces: result.placeIds.length === 0,
+    placeTitles,
+  };
+  const fallbackChips = fallbackReplyChips(chipContext);
+  const [llm, llmChips] = await Promise.all([
+    speakWithQwen({
       character,
       lang,
       message: body.message ?? "",
       history,
       result,
       places,
-    });
-    if (llm?.text) {
-      spoken = llm.text;
-      voice = "qwen";
-      llmMeta = { model: llm.model, provider: llm.provider };
-    }
-  } catch {
-    /* keep engine speech */
+    }).catch(() => null),
+    suggestReplyChips(chipContext).catch(() => null),
+  ]);
+  if (llm?.text) {
+    spoken = llm.text;
+    voice = "qwen";
+    llmMeta = { model: llm.model, provider: llm.provider };
   }
+  const replyChips = normalizeReplyChips(llmChips, fallbackChips, placeTitles);
 
   const message: ChatMessage = {
     id: crypto.randomUUID(),
@@ -235,6 +261,7 @@ export async function POST(req: Request) {
     placeIds: result.placeIds,
     sources: result.sources,
     createdAt: new Date().toISOString(),
+    replyChips,
   };
 
   const userTurn: ChatMessage = {
@@ -270,6 +297,7 @@ export async function POST(req: Request) {
     message,
     result,
     recommendationIds,
+    replyChips,
     status,
     voice,
     llm: { configured: llmKeyStatus().configured, ...llmMeta },

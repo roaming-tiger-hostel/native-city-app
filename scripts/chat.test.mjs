@@ -53,7 +53,20 @@ test("Qwen chat, attributed options, selection, persistence and feedback", async
   const calls = [];
   const reply = `${top.title.ko}로 가보자. 마야의 취향으로 골랐어. 방문 전에 영업시간과 재료를 확인해 줘.`;
   t.mock.method(globalThis, "fetch", async (url, init) => {
-    calls.push({ url, init, payload: JSON.parse(init.body) });
+    const payload = JSON.parse(init.body);
+    calls.push({ url, init, payload });
+    const system = payload.messages?.[0]?.content ?? "";
+    if (String(system).includes("replyChips")) {
+      return Response.json({
+        choices: [
+          {
+            message: {
+              content: '{"chips":["다른 분위기 원해","예산은 어때?","더 가까운 데 있어?"]}',
+            },
+          },
+        ],
+      });
+    }
     return Response.json({ choices: [{ message: { content: reply } }] });
   });
   const first = await POST(
@@ -64,13 +77,22 @@ test("Qwen chat, attributed options, selection, persistence and feedback", async
   assert.equal(data.voice, "qwen");
   assert.equal(data.message.attribution.characterId, "maya");
   assert.ok(data.result.decision.options.length);
+  assert.deepEqual(data.replyChips, [
+    "다른 분위기 원해",
+    "예산은 어때?",
+    "더 가까운 데 있어?",
+  ]);
+  const speech = calls.find(
+    (call) => !String(call.payload.messages?.[0]?.content ?? "").includes("replyChips"),
+  );
+  assert.ok(speech);
   assert.equal(
-    calls[0].url,
+    speech.url,
     "https://qwen.invalid/compatible-mode/v1/chat/completions",
   );
-  assert.equal(calls[0].payload.model, "qwen-plus");
-  assert.ok(calls[0].init.signal instanceof AbortSignal);
-  assert.equal(calls[0].payload.messages.at(-1).content, baseline.message);
+  assert.equal(speech.payload.model, "qwen-plus");
+  assert.ok(speech.init.signal instanceof AbortSignal);
+  assert.equal(speech.payload.messages.at(-1).content, baseline.message);
   assert.ok(!JSON.stringify(data).includes(process.env.QWEN_API_KEY));
   const stored = data.threads.find(
     (thread) => thread.id === "integration-qwen",
@@ -91,7 +113,7 @@ test("Qwen chat, attributed options, selection, persistence and feedback", async
   assert.equal(choice.voice, "qwen");
   assert.deepEqual(choice.result.placeIds, [top.id]);
   assert.equal(choice.result.decision, undefined);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 4);
   assert.deepEqual(choice.recommendationIds, data.result.placeIds);
   const thread = choice.threads.find((thread) => thread.id === stored.id);
   const feedback = {
@@ -162,7 +184,14 @@ test("HTTP failure, empty reply, unrelated reply and timeout keep deterministic 
 test("unexpected current user turn is not dropped when history ends in another user turn", async (t) => {
   let payload;
   t.mock.method(globalThis, "fetch", async (_url, init) => {
-    payload = JSON.parse(init.body);
+    const parsed = JSON.parse(init.body);
+    const system = parsed.messages?.[0]?.content ?? "";
+    if (String(system).includes("replyChips")) {
+      return Response.json({
+        choices: [{ message: { content: '{"chips":["다른 분위기 원해","예산은 어때?"]}' } }],
+      });
+    }
+    payload = parsed;
     return Response.json({
       choices: [{ message: { content: `${top.title.ko} 추천해.` } }],
     });
@@ -208,8 +237,22 @@ test("invalid requests and invalid place selections are rejected", async () => {
 });
 
 test("empty candidate sets do not ask Qwen to invent a place", async (t) => {
-  const mock = t.mock.method(globalThis, "fetch", async () => {
-    throw new Error("should not call");
+  const mock = t.mock.method(globalThis, "fetch", async (_url, init) => {
+    const payload = JSON.parse(init.body);
+    const system = payload.messages?.[0]?.content ?? "";
+    assert.ok(
+      String(system).includes("replyChips"),
+      "only the chip helper may call the model when no places ranked",
+    );
+    return Response.json({
+      choices: [
+        {
+          message: {
+            content: '{"chips":["밥 먹으러 갈래?","조건을 바꿔볼게","을지로로 좁힐게"]}',
+          },
+        },
+      ],
+    });
   });
   const data = await (
     await POST(
@@ -222,5 +265,10 @@ test("empty candidate sets do not ask Qwen to invent a place", async (t) => {
   ).json();
   assert.equal(data.voice, "engine");
   assert.deepEqual(data.result.placeIds, []);
-  assert.equal(mock.mock.callCount(), 0);
+  assert.deepEqual(data.replyChips, [
+    "밥 먹으러 갈래?",
+    "조건을 바꿔볼게",
+    "을지로로 좁힐게",
+  ]);
+  assert.equal(mock.mock.callCount(), 1);
 });
