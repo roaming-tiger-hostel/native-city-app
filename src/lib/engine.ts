@@ -1,4 +1,5 @@
 import { CHARACTERS, HOSTEL, JUDGMENTS, PLACES } from "./catalog";
+import { detectDistrictKeys, placeMatchesDistrict } from "./districts";
 import type {
   Character,
   CharacterId,
@@ -89,9 +90,21 @@ export function rankPlaces(opts: {
   judgments?: Judgment[];
   /** Only when guest asks for nearby/closer — otherwise Seoul-wide soft distance. */
   preferNear?: boolean;
+  districtKeys?: string[];
+  preferCafe?: boolean;
 }): RankedPlace[] {
   const judgments = opts.judgments ?? JUDGMENTS;
   const inKind = opts.places.filter((p) => {
+    if (opts.preferCafe) {
+      return (
+        p.tags.some((tag) => ["cafe", "coffee", "dessert", "brunch"].includes(tag)) ||
+        p.kind === "culture" ||
+        p.kind === "food" ||
+        p.kind === "market"
+      );
+    }
+    // District ask: allow any kind in that area (Seoul-wide demos).
+    if (opts.districtKeys?.length && placeMatchesDistrict(p, opts.districtKeys)) return true;
     if (opts.intent === "food") return p.kind === "food" || p.kind === "market";
     if (opts.intent === "walk") return p.kind === "walk" || p.kind === "culture" || p.kind === "night";
     if (opts.intent === "night") return p.openLate || p.kind === "night" || p.kind === "food";
@@ -115,7 +128,20 @@ export function rankPlaces(opts: {
     return true;
   });
 
-  const pool = constrained;
+  let pool = constrained;
+  if (opts.preferCafe) {
+    const cafes = pool.filter(
+      (p) =>
+        p.tags.some((t) => ["cafe", "coffee", "dessert", "brunch"].includes(t)) ||
+        p.kind === "culture",
+    );
+    if (cafes.length) pool = cafes;
+  }
+  if (opts.districtKeys?.length) {
+    const hit = pool.filter((p) => placeMatchesDistrict(p, opts.districtKeys!));
+    // Prefer district hits but keep a fallback if TourAPI returned nothing local.
+    if (hit.length) pool = hit;
+  }
 
   return withDistance(pool)
     .map((p) => {
@@ -128,15 +154,14 @@ export function rankPlaces(opts: {
       if (p.distMeters != null) {
         const distWeight = opts.character.weights.distance ?? 0;
         if (opts.preferNear) {
-          // Strong hostel proximity only on explicit "closer/nearby" asks.
           score += distWeight * (1 - Math.min(p.distMeters / 4000, 1));
         } else {
-          // Seoul-wide: light distance so Gangnam/Hongdae can still win.
           score += distWeight * 0.2 * (1 - Math.min(p.distMeters / 25000, 1));
         }
       }
       if (opts.guest.lateNight && p.openLate) score += 0.08;
       if (porkFree && p.porkFree) score += 0.12;
+      if (opts.districtKeys?.length && placeMatchesDistrict(p, opts.districtKeys)) score += 0.55;
 
       const why: Localized = whyFor(opts.character, p);
       return { ...p, score, why };
@@ -375,6 +400,8 @@ export function runEngine(opts: {
     /(가까|근처|도보|걸어|호스텔\s*근처|near(by)?|walkable|closer|close to (the )?hostel)/i.test(
       opts.message,
     );
+  const districtKeys = detectDistrictKeys(opts.message);
+  const preferCafe = /(카페|커피|디저트|브런치|cafe|coffee|dessert|brunch)/i.test(opts.message);
   const ranked = rankPlaces({
     character,
     places,
@@ -382,10 +409,22 @@ export function runEngine(opts: {
     intent,
     judgments: opts.judgments,
     preferNear,
+    districtKeys,
+    preferCafe,
   });
 
-  const inCoverage = ranked.filter((p) => character.kinds.includes(p.kind));
-  const chosen = inCoverage.slice(0, 3);
+  const inCoverage = ranked.filter((p) => {
+    if (districtKeys.length && placeMatchesDistrict(p, districtKeys)) return true;
+    if (preferCafe) {
+      return (
+        p.tags.some((tag) => ["cafe", "coffee", "dessert", "brunch"].includes(tag)) ||
+        p.kind === "culture" ||
+        character.kinds.includes(p.kind)
+      );
+    }
+    return character.kinds.includes(p.kind);
+  });
+  const chosen = (inCoverage.length ? inCoverage : ranked).slice(0, 3);
 
   if (!chosen.length) {
     return {

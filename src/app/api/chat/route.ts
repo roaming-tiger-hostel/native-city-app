@@ -18,6 +18,7 @@ import {
   tourCacheGeneration,
   tourConfigured,
 } from "@/lib/tourapi";
+import { detectDistrictKeys, placeMatchesDistrict } from "@/lib/districts";
 import type {
   AxisId,
   Character,
@@ -279,7 +280,8 @@ export async function POST(req: Request) {
   let spoken = result.text[lang];
   let voice: "qwen" | "engine" | "golden" = "engine";
   let jevCardId: string | undefined;
-  const jev = !body.selectedPlaceId
+  const districtKeys = detectDistrictKeys(body.message ?? "");
+  const jev = !body.selectedPlaceId && !districtKeys.length
     ? pickGoldenCard({
         message: body.message ?? "",
         characterId,

@@ -1,3 +1,4 @@
+import { detectDistrictKeys } from "../districts";
 import type { Lang } from "../types";
 import type { Intent } from "../engine";
 import { GOLDEN_CARDS } from "./cards";
@@ -125,6 +126,8 @@ export function pickGoldenCard(input: JevPickInput): JevPickResult | null {
   const message = input.message?.trim() ?? "";
   // Explicit "something else" → miss so Qwen/engine answers
   if (FORCE_MISS_RE.test(message)) return null;
+  // Named Seoul district → miss golden so live TourAPI/engine can target that area.
+  if (detectDistrictKeys(message).length) return null;
 
   const intents = detectIntents(message, input.engineIntent);
   if (!intents.length) return null;

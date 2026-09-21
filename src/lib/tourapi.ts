@@ -335,6 +335,7 @@ export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: 
   };
 }
 
+
 export async function searchSeoulDistrict(message: string, lang: "ko" | "en" = "ko") {
   const map: Array<{ re: RegExp; keyword: string }> = [
     { re: /(강남|gangnam)/i, keyword: lang === "en" ? "Gangnam" : "강남" },
