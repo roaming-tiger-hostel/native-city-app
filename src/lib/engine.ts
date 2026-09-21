@@ -170,7 +170,8 @@ export type Intent = "food" | "walk" | "night" | "rain" | "any";
 
 export function classifyIntent(message: string): Intent {
   if (RAIN_RE.test(message)) return "rain";
-  if (NIGHT_RE.test(message) && /(eat|hungry|밥|먹|배고)/i.test(message)) return "food";
+  // Late-night food asks stay on the night track (not generic lunch food).
+  if (NIGHT_RE.test(message) && /(eat|hungry|밥|먹|배고|야식)/i.test(message)) return "night";
   if (FOOD_RE.test(message)) return "food";
   if (NIGHT_RE.test(message) && WALK_RE.test(message)) return "night";
   if (NIGHT_RE.test(message)) return "night";

@@ -111,7 +111,7 @@ function scoreCard(
 
   let score = overlap.length * 6;
   if (opts.segmentId && card.segmentIds.includes(opts.segmentId)) score += 8;
-  if (card.segmentIds.includes("*")) score += 1;
+  if (card.segmentIds.includes("*")) score += 3;
   if (opts.segmentId && card.segmentIds.includes(opts.segmentId) && !card.segmentIds.includes("*")) {
     score += 2;
   }
@@ -154,7 +154,7 @@ export function pickGoldenCard(input: JevPickInput): JevPickResult | null {
       excludeCardIds: input.excludeCardIds,
       excludePlaceIds: input.excludePlaceIds,
     });
-    if (score < 8) continue;
+    if (score < 6) continue;
     scored.push({ card, score, reason: intents.join("+") });
   }
   if (!scored.length) return null;
