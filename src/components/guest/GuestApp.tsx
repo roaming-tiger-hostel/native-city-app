@@ -27,6 +27,7 @@ import {
   houseCharacters,
   placeById,
 } from "@/lib/catalog";
+import { GUEST_SEGMENTS, segmentById, type GuestSegment } from "@/lib/segments";
 import { greeting, mergePlaces, withDistance } from "@/lib/engine";
 import { readOverlay, writeOverlay } from "@/lib/overlay";
 import { readSession } from "@/lib/session";
@@ -112,6 +113,7 @@ export function GuestApp() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadId, setThreadId] = useState<string>();
   const [characterId, setCharacterId] = useState("maya");
+  const [segmentId, setSegmentId] = useState<string>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [places, setPlaces] = useState<Place[]>(PLACES);
   const [focusIds, setFocusIds] = useState<string[]>([]);
@@ -194,20 +196,44 @@ export function GuestApp() {
     setView("chat");
   }
 
-  function startChat(id: string) {
+  function startChat(id: string, segment?: GuestSegment) {
+    const c = characterById(id, roster);
+    const hello = greeting(c, lang);
+    const starter = (segment?.starterChips ?? []).map((chip) => chip[lang]).filter(Boolean);
+    const seeded: ChatMessage = starter.length
+      ? { ...hello, replyChips: starter.slice(0, 4) }
+      : hello;
     const t: Thread = {
       id: crypto.randomUUID(),
       guestId,
       guestName: readSession()?.name ?? "Visitor",
       characterId: id,
       lang,
-      messages: [greeting(characterById(id, roster), lang)],
+      messages: [seeded],
       placeIds: [],
       updatedAt: new Date().toISOString(),
     };
+    setSegmentId(segment?.id);
     persist(mergeThreads(threadsRef.current, [t]));
     openThread(t);
+    if (starter.length) setReplyChips(starter.slice(0, 4));
   }
+
+  function startFromSegment(segment: GuestSegment) {
+    startChat(segment.characterId, segment);
+  }
+
+  useEffect(() => {
+    if (!decision?.options?.length) return;
+    const titles = decision.options
+      .map((option) => placeById(option.placeId, places)?.title[lang])
+      .filter((title): title is string => Boolean(title));
+    if (!titles.length) return;
+    setReplyChips((prev) => {
+      const merged = [...titles, ...prev.filter((chip) => !titles.includes(chip))];
+      return merged.slice(0, 4);
+    });
+  }, [decision, places, lang]);
 
   useEffect(() => {
     const overlay = readOverlay();
@@ -526,6 +552,27 @@ export function GuestApp() {
                   </button>
                 ))}
               </div>
+
+              <section className="segment-strip" aria-label={ko ? "18 세그먼트" : "18 guest segments"}>
+                <div className="segment-strip-head">
+                  <p className="eyebrow">{ko ? "제안서 18 세그먼트" : "18 PROPOSAL SEGMENTS"}</p>
+                  <span>{ko ? "칩으로 고르기 · JEV" : "Pick a chip · JEV"}</span>
+                </div>
+                <div className="segment-chip-row">
+                  {GUEST_SEGMENTS.map((segment) => (
+                    <button
+                      key={segment.id}
+                      type="button"
+                      className="segment-chip"
+                      onClick={() => startFromSegment(segment)}
+                      title={segment.blurb[lang]}
+                    >
+                      <strong>{segment.label[lang]}</strong>
+                      <small>{characterById(segment.characterId, roster).name[lang]}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
               <section
                 className="character-grid"
                 aria-label={ko ? "대화할 캐릭터" : "Choose a character"}

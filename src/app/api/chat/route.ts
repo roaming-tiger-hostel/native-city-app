@@ -1,7 +1,8 @@
 import { PLACES, guestById } from "@/lib/catalog";
 import { classifyIntent, greeting, mergePlaces, runEngine } from "@/lib/engine";
 import { speakWithQwen, suggestReplyChips } from "@/lib/llm";
-import { fallbackReplyChips, normalizeReplyChips } from "@/lib/replyChips";
+import { fallbackReplyChips, normalizeReplyChips, decisionPlaceChips } from "@/lib/replyChips";
+import { segmentById } from "@/lib/segments";
 import {
   addThread,
   getRuntime,
@@ -78,6 +79,7 @@ export async function POST(req: Request) {
     threadId?: string;
     history?: ChatMessage[];
     selectedPlaceId?: string;
+    segmentId?: string;
     overlay?: {
       judgments?: Judgment[];
       weights?: Partial<Record<CharacterId, Record<AxisId, number>>>;
@@ -112,7 +114,22 @@ export async function POST(req: Request) {
   const cataloged = await catalog();
   let places = cataloged.places;
   const status = cataloged.status;
-  const guest = guestById(body.guestId ?? "visitor");
+  const segment = body.segmentId ? segmentById(body.segmentId) : undefined;
+  const guestBase = guestById(body.guestId ?? "visitor");
+  const guest = {
+    ...guestBase,
+    porkFree: segment?.porkFree || guestBase.porkFree,
+    vegetarian: segment?.vegetarian || guestBase.vegetarian,
+    lateNight: segment?.lateNight || guestBase.lateNight,
+    segment: segment ? segment.label : guestBase.segment,
+    constraints: [
+      ...guestBase.constraints,
+      ...(segment?.porkFree ? ["pork-free"] : []),
+      ...(segment?.vegetarian ? ["vegetarian"] : []),
+      ...(segment?.lateNight ? ["late-night"] : []),
+      ...(segment?.mode ? [segment.mode] : []),
+    ],
+  };
   const characterId = body.characterId ?? "maya";
   const character = trainedCharacter(characterId);
   const runtime = getRuntime();
@@ -246,7 +263,21 @@ export async function POST(req: Request) {
     voice = "qwen";
     llmMeta = { model: llm.model, provider: llm.provider };
   }
-  const replyChips = normalizeReplyChips(llmChips, fallbackChips, placeTitles);
+  const decisionChips = result.decision
+    ? decisionPlaceChips(
+        result.decision.options.map((option) => {
+          const place = places.find((p) => p.id === option.placeId);
+          return { title: place ? place.title[lang] : option.placeId };
+        }),
+        fallbackChips,
+      )
+    : [];
+  // JEV: when ranking produced options, place chips come first; LLM free-text chips fill gaps.
+  const replyChips = normalizeReplyChips(
+    [...decisionChips, ...(llmChips ?? [])],
+    fallbackChips,
+    body.selectedPlaceId ? placeTitles : [],
+  );
 
   const message: ChatMessage = {
     id: crypto.randomUUID(),

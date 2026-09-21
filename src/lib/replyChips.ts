@@ -136,3 +136,11 @@ export function normalizeReplyChips(
   if (out.length < 2) take(CONTEXT.decision.ko.concat(CONTEXT.decision.en));
   return out.slice(0, 4);
 }
+
+export function decisionPlaceChips(
+  options: { title: string }[],
+  langFallback: string[],
+): string[] {
+  const titles = options.map((o) => o.title.trim()).filter(Boolean);
+  return normalizeReplyChips(titles, langFallback, []);
+}

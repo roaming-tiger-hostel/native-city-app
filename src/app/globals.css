@@ -1516,3 +1516,61 @@ body {
   .studio-profile > .character-avatar { width: 108px; height: 150px; border-radius: 18px; }
   .studio-profile-link { padding: 10px 12px; }
 }
+
+
+/* JEV · 18 segment chip strip */
+.segment-strip {
+  margin: 0.75rem 0 1.1rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--card, #141414) 88%, #3d6bff 12%);
+  border: 1px solid color-mix(in srgb, #3d6bff 35%, transparent);
+}
+.segment-strip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+  margin-bottom: 0.65rem;
+}
+.segment-strip-head span {
+  font-size: 0.72rem;
+  opacity: 0.72;
+  letter-spacing: 0.04em;
+}
+.segment-chip-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  -webkit-overflow-scrolling: touch;
+}
+.segment-chip {
+  flex: 0 0 auto;
+  min-width: 9.5rem;
+  max-width: 12rem;
+  text-align: left;
+  border-radius: 14px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, white 14%, transparent);
+  background: color-mix(in srgb, black 35%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+.segment-chip strong {
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+.segment-chip small {
+  display: block;
+  margin-top: 0.25rem;
+  opacity: 0.7;
+  font-size: 0.7rem;
+}
+.segment-chip:hover,
+.segment-chip:focus-visible {
+  border-color: #7aa2ff;
+  outline: none;
+}

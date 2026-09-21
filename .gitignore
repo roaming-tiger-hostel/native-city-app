@@ -43,3 +43,7 @@ data/runtime/*.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local contest refs
+docs/_tiger_concierge_proposal.pdf
+docs/_codex*
