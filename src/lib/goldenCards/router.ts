@@ -27,7 +27,7 @@ const KEYWORD_INTENTS: Array<{ re: RegExp; intent: GoldenIntent }> = [
 
 /** Tyro: "다른 걸로 / else / not these 3" → miss golden, fall through to Qwen/engine. */
 const FORCE_MISS_RE =
-  /(다른\s*걸로|다른\s*거|다른\s*곳|다른\s*추천|이거\s*말고|그건\s*말고|말고\s*다른|대신|바꿔|다시\s*추천|another|something else|different|else|not (these|that|this)| besides)/i;
+  /(다른\s*데|다른데|다른\s*걸로|다른\s*거|다른\s*곳|다른\s*추천|근처(?:에|인데)?\s*다른|이거\s*말고|그건\s*말고|말고\s*다른|대신|바꿔|다시\s*추천|another|something else|somewhere else|nearby.{0,24}other|different|else|not (these|that|this)| besides)/i;
 
 export type JevPickInput = {
   message: string;

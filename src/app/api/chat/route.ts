@@ -181,6 +181,21 @@ export async function POST(req: Request) {
   const history = body.history ?? previous?.messages ?? [];
   if (body.selectedPlaceId && previous?.places)
     places = mergePlaces(places, previous.places);
+  const recentCharacter = [...history, ...(previous?.messages ?? [])]
+    .reverse()
+    .filter((m) => m.role === "character")
+    .slice(0, 6);
+  const excludePlaceIds = body.selectedPlaceId
+    ? []
+    : Array.from(
+        new Set(
+          recentCharacter.flatMap((m) => m.placeIds ?? []).filter(Boolean),
+        ),
+      );
+  // Keep distance/ranking weights; only drop recently shown IDs from the candidate pool.
+  const rankingPlaces = body.selectedPlaceId
+    ? places.filter((p) => p.id === body.selectedPlaceId)
+    : places.filter((p) => !excludePlaceIds.includes(p.id));
   const rankingMessage = body.selectedPlaceId
     ? ([...(previous?.messages ?? [])].reverse().find((m) => m.role === "guest")
         ?.text ??
@@ -192,9 +207,7 @@ export async function POST(req: Request) {
     character,
     guest,
     message: rankingMessage,
-    places: body.selectedPlaceId
-      ? places.filter((p) => p.id === body.selectedPlaceId)
-      : places,
+    places: rankingPlaces.length ? rankingPlaces : places,
     judgments: runtime.judgments,
     usedLiveKto: status.live,
     lang,
@@ -203,6 +216,27 @@ export async function POST(req: Request) {
       .map((m) => m.text),
   });
 
+  if (!body.selectedPlaceId && excludePlaceIds.length) {
+    const filteredIds = result.placeIds.filter((id) => !excludePlaceIds.includes(id));
+    if (filteredIds.length && filteredIds.join() !== result.placeIds.join()) {
+      const kept = filteredIds.length ? filteredIds : result.placeIds;
+      result = {
+        ...result,
+        placeIds: kept,
+        contextPlaceId: kept.includes(result.contextPlaceId ?? "")
+          ? result.contextPlaceId
+          : kept[0],
+        decision: result.decision
+          ? {
+              ...result.decision,
+              options: result.decision.options.filter((o) =>
+                kept.includes(o.placeId),
+              ),
+            }
+          : undefined,
+      };
+    }
+  }
   if (body.selectedPlaceId) {
     const place = places.find((p) => p.id === body.selectedPlaceId);
     if (
@@ -232,16 +266,6 @@ export async function POST(req: Request) {
   let spoken = result.text[lang];
   let voice: "qwen" | "engine" | "golden" = "engine";
   let jevCardId: string | undefined;
-  const recentCharacter = [...history]
-    .reverse()
-    .filter((m) => m.role === "character")
-    .slice(0, 4);
-  const excludePlaceIds = Array.from(
-    new Set(
-      recentCharacter.flatMap((m) => m.placeIds ?? []).filter(Boolean),
-    ),
-  );
-  // attribution not stored for cardId; use place exclusion + followup miss in router
   const jev = !body.selectedPlaceId
     ? pickGoldenCard({
         message: body.message ?? "",
@@ -260,7 +284,8 @@ export async function POST(req: Request) {
     if (jev.card.placeHints?.length) {
       const hinted = jev.card.placeHints
         .map((id) => places.find((p) => p.id === id))
-        .filter((p): p is Place => Boolean(p));
+        .filter((p): p is Place => Boolean(p))
+        .filter((p) => !excludePlaceIds.includes(p.id));
       if (hinted.length) {
         result = {
           ...result,
@@ -313,7 +338,7 @@ export async function POST(req: Request) {
         message: body.message ?? "",
         history,
         result,
-        places,
+        places: rankingPlaces.length ? rankingPlaces : places,
       }).catch(() => null),
       suggestReplyChips(chipContext).catch(() => null),
     ]);
