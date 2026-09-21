@@ -112,7 +112,7 @@ export type ChatMessage = {
   placeIds?: string[];
   sources?: SourceBadge[];
   createdAt: string;
-  voice?: "qwen" | "engine";
+  voice?: "qwen" | "engine" | "golden";
   attribution?: { characterId: string; characterName: string; trainedBy: string };
   replyChips?: string[];
 };

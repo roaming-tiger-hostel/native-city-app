@@ -428,19 +428,23 @@ export function GuestApp() {
   }
 
   const mode =
-    voice === "qwen"
-      ? "Qwen"
-      : voice === "engine"
-        ? ko
-          ? "규칙 답변"
-          : "Rule reply"
-        : llmOn
+    voice === "golden"
+      ? ko
+        ? "골든카드 · JEV"
+        : "Golden card · JEV"
+      : voice === "qwen"
+        ? "Qwen"
+        : voice === "engine"
           ? ko
-            ? "Qwen 준비됨"
-            : "Qwen ready"
-          : ko
-            ? "키 없이 체험"
-            : "Demo mode";
+            ? "규칙 답변"
+            : "Rule reply"
+          : llmOn
+            ? ko
+              ? "Qwen 준비됨"
+              : "Qwen ready"
+            : ko
+              ? "키 없이 체험"
+              : "Demo mode";
   const myThreads = threads.filter((t) => t.guestId === guestId);
   const visibleCharacters = [
     ...communityCharacters(roster),

@@ -3,6 +3,7 @@ import { classifyIntent, greeting, mergePlaces, runEngine } from "@/lib/engine";
 import { speakWithQwen, suggestReplyChips } from "@/lib/llm";
 import { fallbackReplyChips, normalizeReplyChips, decisionPlaceChips } from "@/lib/replyChips";
 import { segmentById } from "@/lib/segments";
+import { pickGoldenCard, chipsFromCard, GOLDEN_CARD_COUNT } from "@/lib/goldenCards";
 import {
   addThread,
   getRuntime,
@@ -229,7 +230,51 @@ export async function POST(req: Request) {
     };
   }
   let spoken = result.text[lang];
-  let voice: "qwen" | "engine" = "engine";
+  let voice: "qwen" | "engine" | "golden" = "engine";
+  let jevCardId: string | undefined;
+  const jev = !body.selectedPlaceId
+    ? pickGoldenCard({
+        message: body.message ?? "",
+        characterId,
+        segmentId: body.segmentId,
+        lang,
+        engineIntent: intent,
+        historyLen: history.length,
+      })
+    : null;
+  if (jev && jev.score >= 6) {
+    spoken = jev.card.text[lang];
+    voice = "golden";
+    jevCardId = jev.card.id;
+    if (jev.card.placeHints?.length) {
+      const hinted = jev.card.placeHints
+        .map((id) => places.find((p) => p.id === id))
+        .filter((p): p is Place => Boolean(p));
+      if (hinted.length) {
+        result = {
+          ...result,
+          placeIds: hinted.map((p) => p.id),
+          contextPlaceId: hinted[0]?.id,
+          decision: {
+            prompt: {
+              ko: "이 카드가 고른 후보야. 칩으로 고르거나 다른 조건을 말해 줘.",
+              en: "Candidates from this answer card. Tap a chip or change the constraint.",
+            },
+            options: hinted.slice(0, 3).map((p) => ({
+              placeId: p.id,
+              why: {
+                ko: p.note.ko,
+                en: p.note.en,
+              },
+            })),
+          },
+          text: jev.card.text,
+        };
+      }
+    } else {
+      result = { ...result, text: jev.card.text };
+    }
+  }
   let llmMeta: { model?: string; provider?: string } = {};
   const placeTitles = result.placeIds.flatMap((id) => {
     const place = places.find((p) => p.id === id);
@@ -247,21 +292,26 @@ export async function POST(req: Request) {
     placeTitles,
   };
   const fallbackChips = fallbackReplyChips(chipContext);
-  const [llm, llmChips] = await Promise.all([
-    speakWithQwen({
-      character,
-      lang,
-      message: body.message ?? "",
-      history,
-      result,
-      places,
-    }).catch(() => null),
-    suggestReplyChips(chipContext).catch(() => null),
-  ]);
-  if (llm?.text) {
-    spoken = llm.text;
-    voice = "qwen";
-    llmMeta = { model: llm.model, provider: llm.provider };
+  const goldenChips = jev?.card ? chipsFromCard(jev.card, lang) : [];
+  let llmChips: string[] | null = null;
+  if (voice !== "golden") {
+    const [llm, suggested] = await Promise.all([
+      speakWithQwen({
+        character,
+        lang,
+        message: body.message ?? "",
+        history,
+        result,
+        places,
+      }).catch(() => null),
+      suggestReplyChips(chipContext).catch(() => null),
+    ]);
+    if (llm?.text) {
+      spoken = llm.text;
+      voice = "qwen";
+      llmMeta = { model: llm.model, provider: llm.provider };
+    }
+    llmChips = suggested;
   }
   const decisionChips = result.decision
     ? decisionPlaceChips(
@@ -272,9 +322,9 @@ export async function POST(req: Request) {
         fallbackChips,
       )
     : [];
-  // JEV: when ranking produced options, place chips come first; LLM free-text chips fill gaps.
+  // JEV: golden followups + place chips first; LLM chips only on miss.
   const replyChips = normalizeReplyChips(
-    [...decisionChips, ...(llmChips ?? [])],
+    [...goldenChips, ...decisionChips, ...(llmChips ?? [])],
     fallbackChips,
     body.selectedPlaceId ? placeTitles : [],
   );
@@ -331,6 +381,9 @@ export async function POST(req: Request) {
     replyChips,
     status,
     voice,
+    jev: jevCardId
+      ? { cardId: jevCardId, cards: GOLDEN_CARD_COUNT, mode: "golden-card" }
+      : { cards: GOLDEN_CARD_COUNT, mode: voice === "golden" ? "golden-card" : "miss" },
     llm: { configured: llmKeyStatus().configured, ...llmMeta },
     places: result.placeIds
       .map((id) => places.find((p) => p.id === id))
