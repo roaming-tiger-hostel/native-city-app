@@ -150,8 +150,8 @@ function whyFor(character: Character, place: Place): Localized {
   }
   if (character.origin === "community") {
     return {
-      ko: `${character.trainedBy.ko} 기준으로 ${place.note.ko}`,
-      en: `${character.trainedBy.en}: ${place.note.en}`,
+      ko: `${place.note.ko}`,
+      en: `${place.note.en}`,
     };
   }
   if (character.id === "sori") {
@@ -187,11 +187,11 @@ export function isSocialMessage(message: string): boolean {
 
 export function socialReply(character: Character): EngineResult {
   const replies: Record<string, Localized> = {
-    maya: { ko: "난 마야야 :) 낯선 도시에서는 편하게 마음 놓는 시간이 좋더라. 오늘 너는 어떤 기분이야?", en: "I’m Maya :) A little comfort matters in a new city. How are you feeling today?" },
-    tom: { ko: "톰이야! 돈 안 드는 수다라면 언제든 환영이지. 오늘 작게라도 좋았던 일 있어?", en: "Tom here! A chat costs nothing, so I’m always up for one. Any little win today?" },
-    yuki: { ko: "유키야. 새로운 것에 익숙해지는 건 천천히 해도 괜찮아. 요즘 새로 좋아하게 된 게 있어?", en: "I’m Yuki. It’s okay to take your time with new things. Anything you’ve started enjoying lately?" },
-    sori: { ko: "소리야. 취향에는 정답이 없지. 너는 어떤 맛을 좋아해?", en: "Sori here. There’s no right answer when it comes to taste. What flavors do you enjoy?" },
-    dal: { ko: "달이야. 서두르지 말고 잠깐 쉬어 가자. 오늘 마음에 남은 장면이 있어?", en: "I’m Dal. Let’s slow down for a moment. What little scene stayed with you today?" },
+    maya: { ko: "난 마야라고 해 :) 낯선 도시에서는 편하게 마음 놓는 시간이 좋더라. 오늘 너는 어떤 기분이야?", en: "Hi, I'm Maya :) A little comfort matters in a new city. How are you feeling today?" },
+    tom: { ko: "난 톰이라고 해! 돈 안 드는 수다라면 언제든 환영이지. 오늘 작게라도 좋았던 일 있어?", en: "Hi, I'm Tom! A chat costs nothing, so I'm always up for one. Any little win today?" },
+    yuki: { ko: "난 유키라고 해. 새로운 것에 익숙해지는 건 천천히 해도 괜찮아. 요즘 새로 좋아하게 된 게 있어?", en: "Hi, I'm Yuki. It's okay to take your time with new things. Anything you've started enjoying lately?" },
+    sori: { ko: "난 소리라고 해. 취향에는 정답이 없지. 너는 어떤 맛을 좋아해?", en: "Hi, I'm Sori. There's no right answer when it comes to taste. What flavors do you enjoy?" },
+    dal: { ko: "난 달이라고 해. 서두르지 말고 잠깐 쉬어 가자. 오늘 마음에 남은 장면이 있어?", en: "Hi, I'm Dal. Let's slow down for a moment. What little scene stayed with you today?" },
   };
   return { text: replies[character.id] ?? character.lines.greeting, placeIds: [], sources: [], usedLiveKto: false };
 }

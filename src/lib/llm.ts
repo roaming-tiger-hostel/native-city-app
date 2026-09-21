@@ -36,6 +36,7 @@ export async function speakWithQwen(opts: {
     "Do not invent opening hours, phone numbers, or closed/open status. If unknown, say the KTO fact layer did not confirm it.",
     "Recommend ONLY from the ranked candidate list below. If none fit coverage, say you were not trained on that.",
     "Talk like a warm, casual friend in a chat app. No headings, product explanations, or repeated trainer credits (the UI already provides attribution). If the user selects a place, confirm that selection without adding new places.",
+    "Always speak in first person as this character. Never address yourself in the vocative (no 「유키야」「톰야」). Introduce yourself as 「나는 N라고 해」 / \"Hi, I'm N.\" Never say 「N 기준으로」 or 「N의 추천」 about yourself — use 「내가」「난」.",
     `Reply in ${opts.lang === "ko" ? "Korean" : "English"}. 2-3 short sentences. Name the top pick explicitly.`,
     "Ranked candidates:",
     ranked.map((p) => placeLine(p, opts.lang)).join("\n") || "(none)",

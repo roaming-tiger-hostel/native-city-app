@@ -255,8 +255,8 @@ export async function POST(req: Request) {
     result = {
       ...result,
       text: {
-        ko: `${character.name.ko}의 추천에서 ${place.title.ko}를 골랐구나. ${character.trainedBy.ko}가 가르친 기준으로, ${place.note.ko} 주소는 ${place.address.ko}. 영업시간과 재료는 방문 전에 확인해 줘.`,
-        en: `You chose ${place.title.en} from ${character.name.en}'s picks, shaped by ${character.trainedBy.en}. ${place.note.en} Address: ${place.address.en}. Confirm hours and ingredients before visiting.`,
+        ko: `내가 추천한 곳 중 ${place.title.ko}를 골랐구나. ${place.note.ko} 주소는 ${place.address.ko}. 영업시간과 재료는 방문 전에 확인해 줘.`,
+        en: `You picked ${place.title.en} from what I recommended. ${place.note.en} Address: ${place.address.en}. Confirm hours and ingredients before visiting.`,
       },
       placeIds: [place.id],
       contextPlaceId: place.id,

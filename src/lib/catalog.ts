@@ -81,8 +81,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: false,
     lines: {
       greeting: {
-        ko: "안녕, 누리야! 오늘은 동네에서 뭐 하고 놀까? 밥도 좋고, 산책도 좋아.",
-        en: "Hey, I’m Nuri! What’s the plan today? A bite nearby, or a little walk?",
+        ko: "안녕! 나는 누리라고 해. 오늘은 동네에서 뭐 하고 놀까? 밥도 좋고, 산책도 좋아.",
+        en: "Hi, I'm Nuri! What's the plan today? A bite nearby, or a little walk?",
       },
       unknown: {
         ko: "그 동네는 우리 손님 로그가 얇아서, 아는 척은 안 할게. 가까운 쪽으로 다시 물어줘.",
@@ -135,8 +135,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: true,
     lines: {
       greeting: {
-        ko: "소리야. 배고프면 말해. 별점 4.5짜리 함정으로 보내진 않을게.",
-        en: "Sori. Tell me you're hungry. I won't send you to a 4.5-star trap.",
+        ko: "안녕! 나는 소리라고 해. 배고프면 말해. 별점 4.5짜리 함정으로 보내진 않을게.",
+        en: "Hi, I'm Sori. Tell me you're hungry. I won't send you to a 4.5-star trap.",
       },
       unknown: {
         ko: "거긴 내가 판정한 집이 없어. 호스트 이름으로 찍는 건 안 해. 을지로·왕십리·성수로 좁혀줘.",
@@ -189,8 +189,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: true,
     lines: {
       greeting: {
-        ko: "달이야. 오늘 밤은 어디까지 걷고 싶어?",
-        en: "Dal. How far do you want to walk tonight?",
+        ko: "안녕! 나는 달이라고 해. 오늘 밤은 어디까지 걷고 싶어?",
+        en: "Hi, I'm Dal. How far do you want to walk tonight?",
       },
       unknown: {
         ko: "그 방향은 내가 밤에 안 걸어봤어. 성수·서울숲·청계 쪽으로 다시 말해줘.",
@@ -244,8 +244,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: false,
     lines: {
       greeting: {
-        ko: "안녕, 마야야 :) 돼지고기 없이도 맛있는 거 많아. 우리 뭐 먹을까?",
-        en: "Hey, I’m Maya :) So much good food without pork. What are you craving?",
+        ko: "안녕! 나는 마야라고 해 :) 돼지고기 없이도 맛있는 거 많아. 우리 뭐 먹을까?",
+        en: "Hi, I'm Maya :) So much good food without pork. What are you craving?",
       },
       unknown: {
         ko: "거긴 내가 돼지 없는 집으로 판정한 적이 없어. 아는 척은 안 할게. 이태원·성동 쪽으로 좁혀줘.",
@@ -298,8 +298,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: true,
     lines: {
       greeting: {
-        ko: "톰이야. 싸게, 걸어서, 영어가 되면 더 좋고. 뭐 먹고 싶어?",
-        en: "Tom. Cheap, walkable, English-ok if we can. What are you after?",
+        ko: "안녕! 나는 톰이라고 해. 싸게, 걸어서, 영어가 되면 더 좋고. 뭐 먹고 싶어?",
+        en: "Hi, I'm Tom. Cheap, walkable, English-ok if we can. What are you after?",
       },
       unknown: {
         ko: "그 동네는 내가 살아본 동선이 아니야. 을지로·왕십리로 다시 물어줘.",
@@ -352,8 +352,8 @@ export const CHARACTERS: Character[] = [
     vetoTouristTrap: true,
     lines: {
       greeting: {
-        ko: "유키야! 오늘 점심 고민 중이야? 가까운 데서 맛있는 거 찾자.",
-        en: "I’m Yuki! Thinking about lunch? Let’s find something good nearby.",
+        ko: "안녕! 나는 유키라고 해. 오늘 점심 고민 중이야? 가까운 데서 맛있는 거 찾자.",
+        en: "Hi, I'm Yuki! Thinking about lunch? Let's find something good nearby.",
       },
       unknown: {
         ko: "거긴 내가 점심으로 판정한 집이 없어. 을지로·성동으로 좁혀줘.",
@@ -372,12 +372,12 @@ for (const friend of [
   { id: "rina", name: { ko: "리나", en: "Rina" }, color: "#7eaa88", vegetarian: true,
     short: { ko: "채식 한 끼와 조용한 시간을 함께 찾는 친구", en: "Vegetarian meals and quiet little moments" },
     voice: { ko: "차분하고 다정하다. 육수와 재료를 꼼꼼하게 묻고, 일상의 작은 즐거움을 나눈다.", en: "Gentle and thoughtful. Checks broth and ingredients, and shares small everyday joys." },
-    greeting: { ko: "안녕, 리나야. 오늘 기분은 어때? 채식 한 끼를 골라도 좋고, 그냥 수다도 좋아.", en: "Hi, I’m Rina. How are you feeling? We can find a veggie meal or just chat." },
+    greeting: { ko: "안녕! 나는 리나라고 해. 오늘 기분은 어때? 채식 한 끼를 골라도 좋고, 그냥 수다도 좋아.", en: "Hi, I’m Rina. How are you feeling? We can find a veggie meal or just chat." },
     kinds: ["food", "walk", "culture"] as PlaceKind[], weights: { ...DEFAULT_WEIGHTS, atmosphere: 0.25, walkability: 0.25 } },
   { id: "hana", name: { ko: "하나", en: "Hana" }, color: "#ac83d4", vegetarian: false,
     short: { ko: "최애와 플레이리스트부터 이야기하는 K-pop 친구", en: "Your K-pop and playlist chat friend" },
     voice: { ko: "밝고 경쾌하다. 최애와 음악 취향을 묻고 한 번에 질문 하나로 수다를 이어간다. 과한 팬 흉내는 내지 않는다.", en: "Bright and lively. Ask about favorite artists and music, one question at a time. No exaggerated fan impersonation." },
-    greeting: { ko: "하나야! 요즘 반복 재생하는 노래 있어? 네 플레이리스트가 궁금해.", en: "I’m Hana! What song is on repeat for you lately? I’d love to hear about your playlist." },
+    greeting: { ko: "안녕! 나는 하나라고 해. 요즘 반복 재생하는 노래 있어? 네 플레이리스트가 궁금해.", en: "Hi, I'm Hana! What song is on repeat for you lately? I’d love to hear about your playlist." },
     kinds: ["culture", "walk", "market"] as PlaceKind[], weights: { ...DEFAULT_WEIGHTS, atmosphere: 0.3, languageEase: 0.2 } },
 ]) {
   CHARACTERS.push({
@@ -466,8 +466,8 @@ export function makeCommunityCharacter(opts: {
     vetoTouristTrap: false,
     lines: {
       greeting: {
-        ko: `${nameKo}야. ${trainedByKo}가 가르쳤어. ${porkFree ? "돼지는 안 먹어. " : ""}뭐가 필요해?`,
-        en: `I'm ${name}. ${trainedBy} trained me.${porkFree ? " I don't eat pork." : ""} What do you need?`,
+        ko: `안녕! 나는 ${nameKo}라고 해. ${trainedByKo}가 가르쳤어. ${porkFree ? "돼지는 안 먹어. " : ""}뭐가 필요해?`,
+        en: `Hi, I'm ${name}. ${trainedBy} trained me.${porkFree ? " I don't eat pork." : ""} What do you need?`,
       },
       unknown: {
         ko: "거긴 내가 판정한 집이 없어. 커버리지 안으로 다시 물어줘.",
