@@ -271,45 +271,86 @@ export async function searchKeyword(keyword: string, lang: "ko" | "en" = "ko") {
   };
 }
 
+/** Seoul-wide hotspots — not hostel-only. radius capped at 20km by locationBasedList. */
+export const SEOUL_HOTSPOTS: Array<{ id: string; lat: number; lng: number; radius: number }> = [
+  { id: "hostel-seongdong", lat: 37.5639, lng: 127.0296, radius: 8000 },
+  { id: "seongsu", lat: 37.5446, lng: 127.0559, radius: 5000 },
+  { id: "euljiro", lat: 37.5662, lng: 126.9915, radius: 5000 },
+  { id: "gwangjang-jongno", lat: 37.5700, lng: 126.9996, radius: 5000 },
+  { id: "hannam-itaewon", lat: 37.5345, lng: 126.9945, radius: 5000 },
+  { id: "hongdae", lat: 37.5563, lng: 126.9236, radius: 5000 },
+  { id: "gangnam", lat: 37.4979, lng: 127.0276, radius: 5000 },
+  { id: "myeongdong", lat: 37.5636, lng: 126.9869, radius: 4000 },
+  { id: "jamsil", lat: 37.5133, lng: 127.1001, radius: 5000 },
+];
+
 export async function hydrateAroundHostel(): Promise<{ places: Place[]; status: TourStatus }> {
-  const [eng, jpn, food, spots] = await Promise.all([
-    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 4000, lang: "en" }),
-    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 4000, lang: "ja" }),
-    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 4000, contentTypeId: "39", lang: "ko" }),
-    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 4000, contentTypeId: "12", lang: "ko" }),
+  // Keep the name for callers; coverage is Seoul-wide multi-query.
+  const queries = SEOUL_HOTSPOTS.flatMap((h) => [
+    locationBasedList({ lat: h.lat, lng: h.lng, radius: h.radius, contentTypeId: "39", lang: "ko" }),
+    locationBasedList({ lat: h.lat, lng: h.lng, radius: h.radius, contentTypeId: "12", lang: "ko" }),
   ]);
+  // EN overlay from a few hubs only (rate limits)
+  const engQueries = [
+    locationBasedList({ lat: 37.5639, lng: 127.0296, radius: 12000, lang: "en" }),
+    locationBasedList({ lat: 37.5563, lng: 126.9236, radius: 6000, lang: "en" }),
+    locationBasedList({ lat: 37.4979, lng: 127.0276, radius: 6000, lang: "en" }),
+  ];
+  const results = await Promise.all([...queries, ...engQueries]);
+  const koResults = results.slice(0, queries.length);
+  const engResults = results.slice(queries.length);
 
   const byId = new Map<string, Place>();
-  for (const p of [...food.places, ...spots.places]) byId.set(p.contentId ?? p.id, p);
-  for (const en of eng.places) {
-    const key = en.contentId ?? en.id;
-    const existing = byId.get(key);
-    if (existing) {
-      byId.set(key, {
-        ...existing,
-        title: { ko: existing.title.ko, en: en.title.en || existing.title.en },
-        overview: { ko: existing.overview.ko, en: en.overview.en || existing.overview.en },
-        address: { ko: existing.address.ko, en: en.address.en || existing.address.en },
-      });
-    } else {
-      byId.set(key, en);
+  for (const batch of koResults) {
+    for (const p of batch.places) byId.set(p.contentId ?? p.id, p);
+  }
+  for (const batch of engResults) {
+    for (const en of batch.places) {
+      const key = en.contentId ?? en.id;
+      const existing = byId.get(key);
+      if (existing) {
+        byId.set(key, {
+          ...existing,
+          title: { ko: existing.title.ko, en: en.title.en || existing.title.en },
+          overview: { ko: existing.overview.ko, en: en.overview.en || existing.overview.en },
+          address: { ko: existing.address.ko, en: en.address.en || existing.address.en },
+        });
+      } else {
+        byId.set(key, en);
+      }
     }
   }
 
-  const live = food.status.live || spots.status.live;
-  const langs = ["ko", eng.status.live ? "en" : null, jpn.status.live ? "ja" : null].filter(Boolean).join("+");
+  const live = koResults.some((r) => r.status.live) || engResults.some((r) => r.status.live);
+  const firstErr = [...koResults, ...engResults].find((r) => !r.status.live)?.status.error;
   return {
     places: [...byId.values()],
     status: {
       live,
-      endpoint: eng.status.live || jpn.status.live
-        ? "KorService2+EngService2+JpnService2 / locationBasedList2"
-        : "KorService2 / locationBasedList2",
+      endpoint: "KorService2(+Eng) / locationBasedList2 × Seoul hotspots",
       count: byId.size,
-      error: live ? undefined : food.status.error || spots.status.error,
-      lang: langs || "ko",
+      error: live ? undefined : firstErr,
+      lang: engResults.some((r) => r.status.live) ? "ko+en" : "ko",
     },
   };
+}
+
+export async function searchSeoulDistrict(message: string, lang: "ko" | "en" = "ko") {
+  const map: Array<{ re: RegExp; keyword: string }> = [
+    { re: /(강남|gangnam)/i, keyword: lang === "en" ? "Gangnam" : "강남" },
+    { re: /(홍대|합정|연남|hongdae|hongik)/i, keyword: lang === "en" ? "Hongdae" : "홍대" },
+    { re: /(명동|myeongdong|myeong-dong)/i, keyword: lang === "en" ? "Myeongdong" : "명동" },
+    { re: /(이태원|한남|itaewon|hannam)/i, keyword: lang === "en" ? "Itaewon" : "이태원" },
+    { re: /(성수|seongsu)/i, keyword: lang === "en" ? "Seongsu" : "성수" },
+    { re: /(을지로|euljiro)/i, keyword: lang === "en" ? "Euljiro" : "을지로" },
+    { re: /(광장시장|종로|jongno|gwangjang)/i, keyword: lang === "en" ? "Jongno" : "광장시장" },
+    { re: /(잠실|jamsil)/i, keyword: lang === "en" ? "Jamsil" : "잠실" },
+    { re: /(건대|konkuk)/i, keyword: lang === "en" ? "Konkuk" : "건대" },
+  ];
+  for (const row of map) {
+    if (row.re.test(message)) return searchKeyword(row.keyword, lang);
+  }
+  return { places: [] as Place[], status: { live: false, endpoint: "none", lang } satisfies TourStatus };
 }
 
 export async function detailCommon(contentId: string, lang: "ko" | "en" = "ko") {

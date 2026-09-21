@@ -14,6 +14,7 @@ import { llmKeyStatus } from "@/lib/secrets";
 import {
   hydrateAroundHostel,
   searchKeyword,
+  searchSeoulDistrict,
   tourCacheGeneration,
   tourConfigured,
 } from "@/lib/tourapi";
@@ -138,24 +139,29 @@ export async function POST(req: Request) {
   const intent = classifyIntent(body.message ?? "");
 
   if (tourConfigured() && body.message && !body.selectedPlaceId) {
+    const district = await searchSeoulDistrict(body.message, lang);
+    if (district.places.length) places = mergePlaces(places, district.places);
     const keyword =
       intent === "food"
         ? lang === "en"
-          ? "restaurant"
-          : "맛집"
+          ? "restaurant Seoul"
+          : "서울 맛집"
         : intent === "walk"
           ? lang === "en"
-            ? "park"
-            : "공원"
+            ? "park Seoul"
+            : "서울 공원"
           : intent === "night"
             ? lang === "en"
-              ? "night view"
-              : "야경"
+              ? "night view Seoul"
+              : "서울 야경"
             : lang === "en"
-              ? "Seongdong"
-              : "성동구";
-    const extra = await searchKeyword(keyword, lang);
-    if (extra.places.length) places = mergePlaces(places, extra.places);
+              ? "Seoul"
+              : "서울";
+    // Generic keyword only when no district hit — keep Seoul-wide, not Seongdong-only.
+    if (!district.places.length) {
+      const extra = await searchKeyword(keyword, lang);
+      if (extra.places.length) places = mergePlaces(places, extra.places);
+    }
   }
 
   if (body.greet) {
@@ -333,12 +339,24 @@ export async function POST(req: Request) {
         if (mixed.some((x) => x.id === p.id)) return;
         mixed.push(p);
       };
-      // Hint first (matches golden copy), then TourAPI, then engine, then catalog.
-      for (const p of hinted) push(p);
+      // Live TourAPI first (Seoul-wide), then engine, then golden hint, then catalog.
       for (const p of livePad) push(p);
       for (const p of enginePad) push(p);
+      for (const p of hinted) push(p);
       for (const p of catalogPad) push(p);
-      const chosen = mixed.slice(0, 3);
+      const districtRe =
+        /(강남|홍대|합정|연남|명동|이태원|한남|성수|을지로|광장|종로|잠실|건대|gangnam|hongdae|myeongdong|itaewon|hannam|seongsu|euljiro|jamsil)/i;
+      const districtHit = districtRe.exec(body.message ?? "");
+      let ordered = mixed;
+      if (districtHit) {
+        const key = districtHit[0].toLowerCase();
+        const score = (p: Place) => {
+          const blob = `${p.title.ko} ${p.title.en} ${p.neighborhood.ko} ${p.neighborhood.en} ${p.address.ko} ${p.tags.join(" ")}`.toLowerCase();
+          return blob.includes(key) || p.tags.some((tag) => tag.toLowerCase().includes(key)) ? 1 : 0;
+        };
+        ordered = [...mixed].sort((a, b) => score(b) - score(a));
+      }
+      const chosen = ordered.slice(0, 3);
       if (chosen.length) {
         result = {
           ...result,

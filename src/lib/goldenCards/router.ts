@@ -154,14 +154,24 @@ export function pickGoldenCard(input: JevPickInput): JevPickResult | null {
       excludeCardIds: input.excludeCardIds,
       excludePlaceIds: input.excludePlaceIds,
     });
-    if (score < 6) continue;
+    if (score < 12) continue;
     scored.push({ card, score, reason: intents.join("+") });
   }
   if (!scored.length) return null;
   scored.sort((a, b) => b.score - a.score);
   const top = scored[0].score;
+  // Vague asks / weak matches → miss so Qwen/engine can answer in detail.
+  if (top < 14) return null;
   const tied = scored.filter((s) => s.score === top);
-  // Rotate among tied cards so the same placeHint is not sticky across turns.
+  // Many equally good cards = ambiguous → miss (avoid sticky golden loops).
+  if (tied.length >= 4 && !intents.includes("greeting")) return null;
+  // Session already used this hint place → miss rather than force a sibling card.
+  if (
+    input.excludePlaceIds?.length &&
+    tied.every((s) => s.card.placeHints?.some((id) => input.excludePlaceIds!.includes(id)))
+  ) {
+    return null;
+  }
   const seed =
     (input.historyLen ?? 0) * 17 +
     (input.excludePlaceIds?.length ?? 0) * 3 +

@@ -37,7 +37,7 @@ export async function speakWithQwen(opts: {
     "Recommend ONLY from the ranked candidate list below. If none fit coverage, say you were not trained on that.",
     "Talk like a warm, casual friend in a chat app. No headings, product explanations, or repeated trainer credits (the UI already provides attribution). If the user selects a place, confirm that selection without adding new places.",
     "Always speak in first person as this character. Never address yourself in the vocative (no 「유키야」「톰야」). Introduce yourself as 「나는 N라고 해」 / \"Hi, I'm N.\" Never say 「N 기준으로」 or 「N의 추천」 about yourself — use 「내가」「난」.",
-    `Reply in ${opts.lang === "ko" ? "Korean" : "English"}. 2-3 short sentences. Name the top pick explicitly.`,
+    `Reply in ${opts.lang === "ko" ? "Korean" : "English"}. 4-6 short sentences. Name the top pick. Cover: why this fits, how to get there (neighborhood/address from the list), and one caution. Never invent hours/phone — only use hours= from the list or say TourAPI did not confirm.`,
     "Ranked candidates:",
     ranked.map((p) => placeLine(p, opts.lang)).join("\n") || "(none)",
     `Deterministic fallback you may paraphrase, not contradict: ${fallback}`,
@@ -65,7 +65,7 @@ export async function speakWithQwen(opts: {
     body: JSON.stringify({
       model: cfg.model,
       temperature: 0.35,
-      max_tokens: 420,
+      max_tokens: 700,
       messages,
     }),
   });

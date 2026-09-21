@@ -87,6 +87,8 @@ export function rankPlaces(opts: {
   guest: GuestProfile;
   intent: "food" | "walk" | "night" | "rain" | "any";
   judgments?: Judgment[];
+  /** Only when guest asks for nearby/closer — otherwise Seoul-wide soft distance. */
+  preferNear?: boolean;
 }): RankedPlace[] {
   const judgments = opts.judgments ?? JUDGMENTS;
   const inKind = opts.places.filter((p) => {
@@ -124,7 +126,14 @@ export function rankPlaces(opts: {
       }
       score += judgmentBoost(opts.character.id, p, judgments);
       if (p.distMeters != null) {
-        score += opts.character.weights.distance * (1 - Math.min(p.distMeters / 5000, 1));
+        const distWeight = opts.character.weights.distance ?? 0;
+        if (opts.preferNear) {
+          // Strong hostel proximity only on explicit "closer/nearby" asks.
+          score += distWeight * (1 - Math.min(p.distMeters / 4000, 1));
+        } else {
+          // Seoul-wide: light distance so Gangnam/Hongdae can still win.
+          score += distWeight * 0.2 * (1 - Math.min(p.distMeters / 25000, 1));
+        }
       }
       if (opts.guest.lateNight && p.openLate) score += 0.08;
       if (porkFree && p.porkFree) score += 0.12;
@@ -233,21 +242,25 @@ function composeSpeech(
   if (character.id === "nuri") {
     const ko = [
       guest.porkFree ? "돼지 안 먹는 제약 반영했어." : null,
-      intent === "food" || intent === "night"
-        ? `${top.title.ko} — ${top.why.ko}`
-        : `${top.title.ko}부터.`,
-      second ? `차선은 ${second.title.ko}. ${second.why.ko}` : null,
-      top.distMeters != null ? `호스텔에서 직선거리 약 ${(top.distMeters / 1000).toFixed(1)}km.` : null,
+      `왜: ${top.title.ko} — ${top.why.ko}`,
+      `가는 법: ${top.neighborhood.ko} · ${top.address.ko}`,
+      top.openHours?.ko
+        ? `TourAPI 시간 참고: ${top.openHours.ko}`
+        : "영업시간은 TourAPI 미확인 — 방문 전 확인해 줘.",
+      second ? `차선: ${second.title.ko}. ${second.why.ko}` : null,
+      top.distMeters != null ? `호스텔 직선 약 ${(top.distMeters / 1000).toFixed(1)}km (참고).` : null,
     ]
       .filter(Boolean)
       .join(" ");
     const en = [
       guest.porkFree ? "I kept the no-pork constraint." : null,
-      intent === "food" || intent === "night"
-        ? `${top.title.en} — ${top.why.en}`
-        : `Start with ${top.title.en}.`,
+      `Why: ${top.title.en} — ${top.why.en}`,
+      `How: ${top.neighborhood.en} · ${top.address.en}`,
+      top.openHours?.en
+        ? `TourAPI hours note: ${top.openHours.en}`
+        : "Hours not confirmed in TourAPI — check before you go.",
       second ? `Backup: ${second.title.en}. ${second.why.en}` : null,
-      top.distMeters != null ? `About ${(top.distMeters / 1000).toFixed(1)} km from the hostel in a straight line.` : null,
+      top.distMeters != null ? `About ${(top.distMeters / 1000).toFixed(1)} km straight-line (reference).` : null,
     ]
       .filter(Boolean)
       .join(" ");
@@ -294,24 +307,43 @@ function composeSpeech(
   }
 
   const pork = Boolean(character.porkFree || guest.porkFree);
+  const hoursKo = top.openHours?.ko;
+  const hoursEn = top.openHours?.en;
   const ko = [
-    pork ? "돼지고기 없는 메뉴로 찾아봤어 :)" : "여기 어때? 네가 좋아할 것 같아.",
-    `${top.title.ko} — ${top.note.ko}`,
-    second ? `${second.title.ko}도 괜찮아. 어디가 끌려?` : null,
-    top.distMeters != null ? `호스텔에서 직선거리 약 ${(top.distMeters / 1000).toFixed(1)}km.` : null,
+    pork ? "돼지고기 없는 쪽으로 골랐어." : "이 후보로 가볼래?",
+    `왜: ${top.title.ko} — ${top.note.ko || top.overview.ko}`,
+    `가는 법: ${top.neighborhood.ko} · ${top.address.ko}`,
+    hoursKo
+      ? `TourAPI에 적힌 시간 참고: ${hoursKo} (방문 전 한 번 더 확인해 줘).`
+      : "영업시간은 TourAPI에서 확인되지 않았어. 가짜로 찍지 않을게 — 방문 전에 직접 확인해 줘.",
+    second ? `다른 후보: ${second.title.ko} (${second.neighborhood.ko}).` : null,
+    preferNearNote(top),
   ]
     .filter(Boolean)
     .join(" ");
   const en = [
-    pork ? "Found some options without pork :)" : "How about this? I think you’d like it.",
-    `${top.title.en} — ${top.note.en}`,
-    second ? `${second.title.en} is another option. Which sounds good?` : null,
-    top.distMeters != null ? `About ${(top.distMeters / 1000).toFixed(1)} km from the hostel in a straight line.` : null,
+    pork ? "I stuck to pork-free options." : "Want to try this pick?",
+    `Why: ${top.title.en} — ${top.note.en || top.overview.en}`,
+    `How: ${top.neighborhood.en} · ${top.address.en}`,
+    hoursEn
+      ? `TourAPI hours note: ${hoursEn} (re-check before you go).`
+      : "Opening hours were not confirmed in TourAPI — I won't invent them. Check before you go.",
+    second ? `Also: ${second.title.en} (${second.neighborhood.en}).` : null,
+    preferNearNoteEn(top),
   ]
     .filter(Boolean)
     .join(" ");
   void lang;
   return { ko, en };
+}
+
+function preferNearNote(top: Place & { distMeters?: number }) {
+  if (top.distMeters == null) return null;
+  return `호스텔에서 직선 약 ${(top.distMeters / 1000).toFixed(1)}km (참고용).`;
+}
+function preferNearNoteEn(top: Place & { distMeters?: number }) {
+  if (top.distMeters == null) return null;
+  return `About ${(top.distMeters / 1000).toFixed(1)} km straight-line from the hostel (reference only).`;
 }
 
 export function runEngine(opts: {
@@ -339,12 +371,17 @@ export function runEngine(opts: {
   const intent = currentIntent === "any"
     ? [...(opts.history ?? [])].reverse().map(classifyIntent).find((i) => i !== "any") ?? currentIntent
     : currentIntent;
+  const preferNear =
+    /(가까|근처|도보|걸어|호스텔\s*근처|near(by)?|walkable|closer|close to (the )?hostel)/i.test(
+      opts.message,
+    );
   const ranked = rankPlaces({
     character,
     places,
     guest,
     intent,
     judgments: opts.judgments,
+    preferNear,
   });
 
   const inCoverage = ranked.filter((p) => character.kinds.includes(p.kind));
