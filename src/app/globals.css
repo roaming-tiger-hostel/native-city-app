@@ -833,6 +833,30 @@ body {
   color: var(--accent);
   flex-shrink: 0;
 }
+.reply-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 14px 40px;
+  max-width: 560px;
+}
+.reply-chips button {
+  border: 1px solid #e7dcf4;
+  border-radius: 22px;
+  padding: 8px 13px;
+  background: #fff;
+  color: #6d4ea0;
+  font-size: 12px;
+  min-height: 36px;
+  line-height: 1.35;
+}
+.reply-chips button:hover {
+  background: #f3ecfd;
+  border-color: #c9b3e8;
+}
+.reply-chips button:disabled {
+  opacity: 0.5;
+}
 .feedback-bar {
   display: flex;
   align-items: center;
@@ -1395,6 +1419,7 @@ body {
     line-height: 1.75;
   }
   .reply-options,
+  .reply-chips,
   .feedback-bar,
   .typing-indicator {
     margin-left: 38px;

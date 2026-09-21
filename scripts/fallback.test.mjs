@@ -42,5 +42,8 @@ test("without any API key, chat and choices work without external requests", asy
   assert.equal(data.llm.configured, false);
   assert.equal(data.status.live, false);
   assert.ok(data.result.decision.options.length);
+  assert.ok(Array.isArray(data.replyChips));
+  assert.ok(data.replyChips.length >= 2 && data.replyChips.length <= 4);
+  for (const chip of data.replyChips) assert.equal(typeof chip, "string");
   assert.equal(mock.mock.callCount(), 0);
 });

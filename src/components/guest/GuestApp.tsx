@@ -130,6 +130,7 @@ export function GuestApp() {
   const [llmOn, setLlmOn] = useState(false);
   const [feedbackPending, setFeedbackPending] = useState(false);
   const [guestId, setGuestId] = useState("visitor");
+  const [replyChips, setReplyChips] = useState<string[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<AbortController | null>(null);
   const busyRef = useRef(false);
@@ -179,6 +180,12 @@ export function GuestApp() {
     setFocusIds(t.placeIds);
     setSelectedId(t.placeIds[0]);
     setDecision(t.decision);
+    const lastCharacter = [...t.messages]
+      .reverse()
+      .find((m) => m.role === "character");
+    setReplyChips(
+      lastCharacter?.replyChips?.filter((chip) => chip.trim()).slice(0, 4) ?? [],
+    );
     if (t.places?.length) {
       const savedPlaces = t.places;
       setPlaces((prev) => mergePlaces(prev, savedPlaces));
@@ -255,7 +262,7 @@ export function GuestApp() {
       top: listRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, pending, decision]);
+  }, [messages, pending, decision, replyChips]);
 
   useEffect(() => {
     const dialog = mapDialog.current;
@@ -302,9 +309,20 @@ export function GuestApp() {
       const data = await response.json();
       if (!data.message || !data.result) throw new Error("invalid-response");
       if (requestRef.current !== controller) return;
-      const nextMessages = [...history, data.message as ChatMessage];
+      const chips = (
+        Array.isArray(data.replyChips)
+          ? data.replyChips
+          : ((data.message as ChatMessage).replyChips ?? [])
+      )
+        .filter((chip: unknown): chip is string => typeof chip === "string" && chip.trim().length > 0)
+        .slice(0, 4);
+      const nextMessages = [
+        ...history,
+        { ...(data.message as ChatMessage), replyChips: chips },
+      ];
       const result = data.result as EngineResult;
       setMessages(nextMessages);
+      setReplyChips(chips);
       setFocusIds(result.placeIds);
       setSelectedId(result.contextPlaceId);
       setDecision(result.decision);
@@ -892,6 +910,23 @@ export function GuestApp() {
               })}
             </div>
           ) : null}
+          {!pending && replyChips.length ? (
+            <div
+              className="reply-chips"
+              aria-label={ko ? "다음에 보낼 답" : "Suggested replies"}
+            >
+              {replyChips.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => void send(chip)}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {!pending && lastReply ? (
             <div className="feedback-bar">
               <span>
@@ -929,18 +964,20 @@ export function GuestApp() {
           ) : null}
         </div>
         <div className="reply-dock">
-          <div className="quick-replies">
-            {promptsFor(character, lang).map((prompt) => (
-              <button
-                key={prompt}
-                disabled={pending}
-                onClick={() => send(prompt)}
-              >
-                {prompt}
-                <ChevronRight size={13} />
-              </button>
-            ))}
-          </div>
+          {replyChips.length ? null : (
+            <div className="quick-replies">
+              {promptsFor(character, lang).map((prompt) => (
+                <button
+                  key={prompt}
+                  disabled={pending}
+                  onClick={() => send(prompt)}
+                >
+                  {prompt}
+                  <ChevronRight size={13} />
+                </button>
+              ))}
+            </div>
+          )}
           {error ? (
             <div className="chat-error" role="alert">
               {error}

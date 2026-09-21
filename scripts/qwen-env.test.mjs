@@ -45,5 +45,6 @@ test("non-Qwen environment configuration falls back without sending any external
   assert.equal(data.llm.configured, false);
   assert.equal(data.status.live, false);
   assert.ok(data.result.decision.options.length);
+  assert.ok(data.replyChips.length >= 2 && data.replyChips.length <= 4);
   assert.equal(mock.mock.callCount(), 0);
 });

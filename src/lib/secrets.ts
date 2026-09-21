@@ -214,6 +214,39 @@ export function getLlmConfig(): LlmConfig | null {
   return config && isQwenModel(config.model) ? config : null;
 }
 
+function isLocalLlmBase(baseUrl: string) {
+  try {
+    const url = new URL(baseUrl);
+    return (
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "::1" ||
+      url.port === "11434" ||
+      url.hostname.includes("ollama")
+    );
+  } catch {
+    return /localhost|127\.0\.0\.1|11434|ollama/i.test(baseUrl);
+  }
+}
+
+/** Qwen (guest speech) or a local Ollama/OpenAI-compatible endpoint. Cloud non-Qwen models stay unused. */
+export function getReplyChipLlmConfig(): LlmConfig | null {
+  const qwen = getLlmConfig();
+  if (qwen) return qwen;
+  const base = BOOT_LLM_BASE.replace(/\/$/, "");
+  const model = BOOT_LLM_MODEL;
+  if (base && model && isLocalLlmBase(base)) {
+    return {
+      key: BOOT_LLM || "ollama",
+      baseUrl: base,
+      model,
+      provider: "ollama",
+      source: "env",
+    };
+  }
+  return null;
+}
+
 export function llmKeyStatus(): LlmStatus {
   const cfg = getLlmConfig();
   if (!cfg) {

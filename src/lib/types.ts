@@ -113,6 +113,7 @@ export type ChatMessage = {
   createdAt: string;
   voice?: "qwen" | "engine";
   attribution?: { characterId: string; characterName: string; trainedBy: string };
+  replyChips?: string[];
 };
 
 export type SourceBadge = {
