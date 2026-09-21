@@ -16,7 +16,7 @@ export const GOLDEN_CARDS: GoldenCard[] = [
     segmentIds: ["cn-mainland", "sea-worker", "en-backpacker", "eu-backpacker"],
     intents: ["greeting"],
     tags: ["greeting", "opener"],
-    text: { ko: "안녕! 나는 톰라고 해. 배고프면 식사, 걷고 싶으면 동선, 조건 있으면 칩으로 먼저 골라 줘. 난 미리 적어 둔 답으로 빠르게 맞춰 볼게.", en: "Hi, I'm Tom. Hungry, walking, or a constraint? Tap a chip first — I'll match a prepared answer quickly." },
+    text: { ko: "안녕! 나는 톰이라고 해. 배고프면 식사, 걷고 싶으면 동선, 조건 있으면 칩으로 먼저 골라 줘. 난 미리 적어 둔 답으로 빠르게 맞춰 볼게.", en: "Hi, I'm Tom. Hungry, walking, or a constraint? Tap a chip first — I'll match a prepared answer quickly." },
     chipFollowups: [{ ko: "밥 추천", en: "Food pick" }, { ko: "산책", en: "A walk" }, { ko: "조건 고르기", en: "Set constraints" }],
   },
   {
@@ -52,7 +52,7 @@ export const GOLDEN_CARDS: GoldenCard[] = [
     segmentIds: ["eu-couple", "lgbtq-safe"],
     intents: ["greeting"],
     tags: ["greeting", "opener"],
-    text: { ko: "안녕! 나는 달라고 해. 배고프면 식사, 걷고 싶으면 동선, 조건 있으면 칩으로 먼저 골라 줘. 난 미리 적어 둔 답으로 빠르게 맞춰 볼게.", en: "Hi, I'm Dal. Hungry, walking, or a constraint? Tap a chip first — I'll match a prepared answer quickly." },
+    text: { ko: "안녕! 나는 달이라고 해. 배고프면 식사, 걷고 싶으면 동선, 조건 있으면 칩으로 먼저 골라 줘. 난 미리 적어 둔 답으로 빠르게 맞춰 볼게.", en: "Hi, I'm Dal. Hungry, walking, or a constraint? Tap a chip first — I'll match a prepared answer quickly." },
     chipFollowups: [{ ko: "밥 추천", en: "Food pick" }, { ko: "산책", en: "A walk" }, { ko: "조건 고르기", en: "Set constraints" }],
   },
   {
